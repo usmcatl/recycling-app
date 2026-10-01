@@ -2,7 +2,7 @@
   "expo": {
     "name": "Recycle Connect",
     "slug": "recycle-connect",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -11,7 +11,8 @@
       "bundleIdentifier": "mx.ajijicrecycling.recycleconnect",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Recycle Connect uses your location to set your pickup address and to show drivers nearby pickups."
-      }
+      },
+      "buildNumber": "2"
     },
     "android": {
       "adaptiveIcon": {
@@ -23,7 +24,8 @@
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION"
-      ]
+      ],
+      "versionCode": 2
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -52,6 +54,13 @@
         "expo-location",
         {
           "locationWhenInUsePermission": "Recycle Connect uses your location to set your pickup address and to show drivers nearby pickups."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Recycle Connect uses the camera so drivers can photograph bags left at the door as proof of pickup.",
+          "microphonePermission": false
         }
       ]
     ],

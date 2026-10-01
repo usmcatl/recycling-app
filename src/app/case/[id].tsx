@@ -1,51 +1,71 @@
+import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, Platform, View } from 'react-native';
-import { StatusChip, useMaterialsLabel } from '@/components/requests';
+import { Image, View } from 'react-native';
+import { RatingCard, ReputationLine, useReputation } from '@/components/rating';
+import { StatusChip, useDateLabel, useMaterialsLabel } from '@/components/requests';
+import { StopPhoto } from '@/components/StopPhoto';
 import { Avatar, Button, Card, ErrorText, Field, Header, IconTile, Loading, Row, Screen, Text } from '@/components/ui';
 import { api } from '@/lib/api';
-import { RECYCLING_CENTER } from '@/lib/constants';
-import { callNumber, formatDate, formatKg, openDirections, openWhatsApp } from '@/lib/format';
-import type { RequestStatus } from '@/lib/types';
+import { NO_SHOW_WAIT_MINUTES } from '@/lib/constants';
+import { callNumber, formatKg, formatTime, openDirections, openWhatsApp } from '@/lib/format';
 import { useData } from '@/lib/use-data';
-import { colors, fonts } from '@/theme';
+import { useSession } from '@/providers/session';
+import { colors, fonts, radius, space } from '@/theme';
 
-function confirm(message: string, onYes: () => void, yesLabel: string, noLabel: string) {
-  if (Platform.OS === 'web') {
-    onYes();
-    return;
-  }
-  Alert.alert(message, undefined, [
-    { text: noLabel, style: 'cancel' },
-    { text: yesLabel, style: 'destructive', onPress: onYes },
-  ]);
+/** Re-renders every second while `active`, for the wait countdown. */
+function useNow(active: boolean) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [active]);
+  return now;
 }
 
-export default function CaseDetail() {
+export default function StopDetail() {
   const { t } = useTranslation();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { userId } = useSession();
   const { data: r, loading, reload, setData } = useData(() => api.getRequest(id), [id]);
   const materialsLabel = useMaterialsLabel();
+  const dateLabel = useDateLabel();
+  const reputation = useReputation([r?.donor_id]);
+  const [photo, setPhoto] = useState<string | null>(null);
   // null until the driver edits it; until then show the estimate
   const [kgInput, setKg] = useState<string | null>(null);
   const [issue, setIssue] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => api.subscribeRequest(id, setData), [id, setData]);
-  const kg = kgInput ?? (r ? String(r.actual_kg ?? r.estimated_kg) : '');
+
+  const active = !!r && r.driver_id === userId && r.status === 'en_route';
+  const waitingForNoShow = active && r.pickup_mode === 'in_person' && !!r.arrived_at;
+  const now = useNow(waitingForNoShow);
 
   if (loading && !r) return <Loading />;
   if (!r) {
     return (
       <View style={{ flex: 1 }}>
-        <Header title={t('case.title')} />
+        <Header title={t('stop.title')} />
         <Screen>
           <Text>{t('requestStatus.notFound')}</Text>
         </Screen>
       </View>
     );
   }
+
+  const mine = r.driver_id === userId;
+  const closed = ['picked_up', 'deposited', 'no_show', 'cancelled'].includes(r.status);
+  const kg = kgInput ?? String(r.actual_kg ?? r.estimated_kg);
+  const donor = r.donor;
+  const coords = r.lat != null && r.lng != null ? { lat: r.lat, lng: r.lng } : null;
+
+  const waitEnds = r.arrived_at ? new Date(r.arrived_at).getTime() + NO_SHOW_WAIT_MINUTES * 60_000 : null;
+  const msLeft = waitEnds ? Math.max(0, waitEnds - now) : null;
+  const canNoShow = r.pickup_mode === 'doorstep' || (msLeft === 0 && !!r.contacted_at);
 
   async function act(fn: () => Promise<void>) {
     setError(null);
@@ -57,46 +77,78 @@ export default function CaseDetail() {
     }
   }
 
-  const advance = (status: RequestStatus, opts?: { kg?: number; note?: string }) =>
-    act(() => api.advanceRequest(r.id, status, opts));
+  async function contact(how: 'call' | 'whatsapp') {
+    if (!donor?.whatsapp) return;
+    if (active) await api.markContacted(r!.id).catch(() => {});
+    if (how === 'call') callNumber(donor.whatsapp);
+    else openWhatsApp(donor.whatsapp, `Recycle Connect #${r!.case_code}`);
+    reload();
+  }
 
-  const inHand = r.status === 'claimed' || r.status === 'en_route';
-  const closed = ['deposited', 'cancelled', 'no_show'].includes(r.status);
-  const donor = r.donor;
-  const coords = r.lat != null && r.lng != null ? { lat: r.lat, lng: r.lng } : null;
+  async function takePhoto() {
+    setError(null);
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) {
+      setError(t('stop.cameraDenied'));
+      return;
+    }
+    const shot = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.5 });
+    if (!shot.canceled && shot.assets[0]) setPhoto(shot.assets[0].uri);
+  }
+
+  async function uploadIfAny() {
+    return photo ? api.uploadPhoto(r!.id, photo) : undefined;
+  }
+
+  function collect() {
+    return act(async () => {
+      if (r!.pickup_mode === 'doorstep' && !photo && !r!.photo_url) throw new Error(t('stop.photoNeeded'));
+      const n = Number(kg.replace(',', '.'));
+      const ref = await uploadIfAny();
+      await api.collectStop(r!.id, { kg: Number.isFinite(n) && n > 0 ? n : undefined, photo: ref });
+      setPhoto(null);
+    });
+  }
+
+  function noShow() {
+    return act(async () => {
+      const ref = await uploadIfAny();
+      await api.noShowStop(r!.id, { note: issue ?? '', photo: ref });
+      setIssue(null);
+      setPhoto(null);
+    });
+  }
+
+  const minutes = msLeft != null ? Math.floor(msLeft / 60_000) : 0;
+  const seconds = msLeft != null ? Math.floor((msLeft % 60_000) / 1000) : 0;
 
   return (
     <View style={{ flex: 1 }}>
-      <Header title={t('case.title')} />
+      <Header title={t('stop.title')} />
       <Screen>
         <Row style={{ justifyContent: 'space-between' }}>
           <Text variant="eyebrow">
-            {t('common.caseId')} #{r.case_code}
+            #{r.case_code} · {dateLabel(r.route_date)}
           </Text>
           <StatusChip status={r.status} />
         </Row>
 
         <Card>
-          <Text variant="eyebrow">{t('case.donor')}</Text>
+          <Text variant="eyebrow">{t('stop.donor')}</Text>
           <Row>
             <Avatar name={donor?.full_name ?? '?'} size={56} />
-            <Text variant="headline" style={{ flex: 1 }}>
-              {donor?.full_name ?? '—'}
-            </Text>
+            <View style={{ flex: 1, gap: 4 }}>
+              <Text variant="headline">{donor?.full_name ?? '—'}</Text>
+              <ReputationLine reputation={reputation[r.donor_id]} />
+            </View>
           </Row>
-          {donor?.whatsapp ? (
+          {donor?.whatsapp && mine ? (
             <Row>
-              <Button label={t('case.callDonor')} icon="call" onPress={() => callNumber(donor.whatsapp!)} style={{ flex: 1 }} />
-              <Button
-                variant="secondary"
-                label={t('common.whatsapp')}
-                icon="chat"
-                onPress={() => openWhatsApp(donor.whatsapp!, `Recycle Connect #${r.case_code}`)}
-                style={{ flex: 1 }}
-              />
+              <Button label={t('stop.callDonor')} icon="call" onPress={() => contact('call')} style={{ flex: 1 }} />
+              <Button variant="secondary" label={t('common.whatsapp')} icon="chat" onPress={() => contact('whatsapp')} style={{ flex: 1 }} />
             </Row>
-          ) : r.status === 'open' ? (
-            <Text variant="bodySmall">{t('case.contactAfterClaim')}</Text>
+          ) : !mine ? (
+            <Text variant="bodySmall">{t('stop.contactAfterClaim')}</Text>
           ) : null}
         </Card>
 
@@ -104,33 +156,38 @@ export default function CaseDetail() {
           <Row style={{ alignItems: 'flex-start' }}>
             <IconTile name="location-on" size={44} bg={colors.surfaceContainerLowest} />
             <View style={{ flex: 1, gap: 4 }}>
-              <Text variant="eyebrow">{t('case.address')}</Text>
+              <Text variant="eyebrow">{t('stop.address')}</Text>
               <Text variant="title">{r.address}</Text>
-              {r.community ? <Text variant="bodySmall">{r.community}</Text> : null}
+              <Text variant="bodySmall">{r.community}</Text>
             </View>
           </Row>
-          <Button variant="tertiary" label={t('common.openInMaps')} icon="open-in-new" onPress={() => openDirections(coords, `${r.address}, ${r.community ?? ''}`)} />
+          <Button
+            variant="tertiary"
+            label={t('common.openInMaps')}
+            icon="open-in-new"
+            onPress={() => openDirections(coords, `${r.address}, ${r.community}`)}
+          />
         </Card>
 
         <Row style={{ alignItems: 'stretch' }}>
           <Card tone="low" style={{ flex: 1 }}>
-            <Text variant="eyebrow">{t('case.load')}</Text>
+            <Text variant="eyebrow">{t('stop.load')}</Text>
             <Text style={{ fontFamily: fonts.display, fontSize: 34, color: colors.primary }}>{String(r.bag_count).padStart(2, '0')}</Text>
             <Text variant="bodySmall">≈ {formatKg(r.estimated_kg)} kg</Text>
           </Card>
           <Card tone="low" style={{ flex: 1 }}>
-            <Text variant="eyebrow">{t('case.when')}</Text>
-            <Text variant="title">{formatDate(r.preferred_date)}</Text>
-            <Text variant="bodySmall">{t(`windows.${r.time_window}`)}</Text>
+            <Text variant="eyebrow">{t('stop.mode')}</Text>
+            <IconTile name={r.pickup_mode === 'doorstep' ? 'door-front' : 'handshake'} size={40} bg={colors.surfaceContainerLowest} />
+            <Text variant="label">{t(`modes.${r.pickup_mode}`)}</Text>
           </Card>
         </Row>
 
         <Card tone="low">
-          <Text variant="eyebrow">{t('case.materials')}</Text>
+          <Text variant="eyebrow">{t('stop.materials')}</Text>
           <Text variant="label">{materialsLabel(r.materials, r.other_material)}</Text>
           {r.instructions ? (
             <>
-              <Text variant="eyebrow">{t('case.instructions')}</Text>
+              <Text variant="eyebrow">{t('stop.instructions')}</Text>
               <Text style={{ fontStyle: 'italic' }}>“{r.instructions}”</Text>
             </>
           ) : null}
@@ -138,72 +195,75 @@ export default function CaseDetail() {
 
         <ErrorText message={error} />
 
-        {r.status === 'open' ? (
-          <Button label={t('case.claim')} icon="check-circle" onPress={() => act(() => api.claimRequest(r.id))} />
-        ) : null}
-
-        {r.status === 'claimed' ? (
-          <Button variant="secondary" label={t('case.startRoute')} icon="directions" onPress={() => advance('en_route')} />
-        ) : null}
-
-        {inHand ? (
+        {mine && (r.status === 'claimed' || r.status === 'open') ? (
           <Card tone="secondary">
-            <Field label={t('case.weightPrompt')} value={kg} onChangeText={setKg} keyboardType="decimal-pad" />
+            <Text>{t('stop.notStarted')}</Text>
+            <Button variant="secondary" label={t('driver.viewRoute')} onPress={() => router.push(`/route/${r.route_id}`)} />
+          </Card>
+        ) : null}
+
+        {active && r.pickup_mode === 'in_person' ? (
+          <Card tone="secondary">
+            {!r.arrived_at ? (
+              <Button label={t('stop.arrived')} icon="place" onPress={() => act(() => api.markArrived(r.id))} />
+            ) : (
+              <>
+                <Text variant="label">{t('stop.arrivedAt', { time: formatTime(new Date(r.arrived_at)) })}</Text>
+                {msLeft ? (
+                  <Text variant="bodySmall">
+                    {t('stop.waiting', { left: `${minutes}:${String(seconds).padStart(2, '0')}` })}
+                  </Text>
+                ) : null}
+                {!r.contacted_at ? <Text variant="bodySmall">{t('stop.contactFirst')}</Text> : null}
+              </>
+            )}
+          </Card>
+        ) : null}
+
+        {active ? (
+          <Card tone="low">
+            {r.pickup_mode === 'doorstep' ? (
+              <View style={{ gap: space.sm }}>
+                {photo ? (
+                  <Image source={{ uri: photo }} style={{ height: 200, borderRadius: radius.md }} resizeMode="cover" />
+                ) : r.photo_url ? (
+                  <StopPhoto photoRef={r.photo_url} />
+                ) : (
+                  <Text variant="bodySmall">{t('stop.photoNeeded')}</Text>
+                )}
+                <Button
+                  variant="secondary"
+                  icon="photo-camera"
+                  label={photo || r.photo_url ? t('stop.retakePhoto') : t('stop.takePhoto')}
+                  onPress={takePhoto}
+                />
+              </View>
+            ) : null}
+            <Field label={t('stop.weight')} value={kg} onChangeText={setKg} keyboardType="decimal-pad" />
             <Button
-              label={t('case.confirmCollection')}
+              label={t('stop.collect')}
               icon="check-circle"
-              onPress={() => {
-                const n = Number(kg.replace(',', '.'));
-                return advance('picked_up', Number.isFinite(n) && n > 0 ? { kg: n } : undefined);
-              }}
+              disabled={r.pickup_mode === 'doorstep' && !photo && !r.photo_url}
+              onPress={collect}
             />
           </Card>
         ) : null}
 
-        {r.status === 'picked_up' ? (
-          <Card tone="primary">
-            <Text style={{ color: colors.onPrimary }}>
-              {RECYCLING_CENTER.name} · {RECYCLING_CENTER.address}
-            </Text>
-            <Button variant="secondary" label={t('case.navigateCenter')} icon="directions" onPress={() => openDirections(RECYCLING_CENTER.location)} />
-            <Button
-              variant="secondary"
-              label={t('case.deposit')}
-              icon="eco"
-              onPress={async () => {
-                await advance('deposited');
-                router.back();
-              }}
-            />
-          </Card>
-        ) : null}
-
-        {inHand ? (
+        {active ? (
           issue == null ? (
-            <>
-              <Button variant="tertiary" label={t('case.release')} onPress={() =>
-                confirm(t('case.releaseConfirm'), () => act(() => api.releaseRequest(r.id)), t('common.confirm'), t('common.back'))
-              } />
-              <Button variant="danger" label={t('case.reportIssue')} icon="report" onPress={() => setIssue('')} />
-            </>
+            <Button variant="danger" label={t('stop.noShow')} icon="report" disabled={!canNoShow} onPress={() => setIssue('')} />
           ) : (
             <Card tone="low">
               <Field
-                label={t('case.issuePrompt')}
+                label={t('stop.noShowPrompt')}
                 value={issue}
                 onChangeText={setIssue}
-                placeholder={t('case.issuePlaceholder')}
+                placeholder={t('stop.noShowPlaceholder')}
                 multiline
               />
               <Row>
                 <Button variant="tertiary" label={t('common.cancel')} onPress={() => setIssue(null)} style={{ flex: 1 }} />
-                <Button
-                  variant="danger"
-                  label={t('common.confirm')}
-                  disabled={!issue.trim()}
-                  onPress={() => advance('no_show', { note: issue.trim() })}
-                  style={{ flex: 1 }}
-                />
+                <Button variant="danger" label={t('stop.noShowConfirm')} disabled={!issue.trim()} onPress={noShow} style={{ flex: 1 }} />
               </Row>
             </Card>
           )
@@ -211,10 +271,17 @@ export default function CaseDetail() {
 
         {closed ? (
           <Card tone="low">
-            <Text>{t('case.completed')}</Text>
+            <Text>{t('stop.closed')}</Text>
             {r.actual_kg != null ? <Text variant="label">{t('requestStatus.actual', { kg: formatKg(r.actual_kg) })}</Text> : null}
             {r.status_note ? <Text variant="bodySmall">{r.status_note}</Text> : null}
+            {r.photo_url ? <StopPhoto photoRef={r.photo_url} /> : null}
           </Card>
+        ) : null}
+
+        {mine ? <RatingCard request={r} rateeRole="donor" /> : null}
+
+        {mine && !closed && r.status === 'en_route' ? (
+          <Button variant="tertiary" label={t('driver.viewRoute')} onPress={() => router.push(`/route/${r.route_id}`)} />
         ) : null}
       </Screen>
     </View>

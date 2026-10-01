@@ -37,12 +37,21 @@ export default function Confirmed() {
             #{request.case_code}
           </Text>
           <Row gap={space.sm}>
-            <Icon name="schedule" size={18} />
-            <Text variant="label">
-              {t('confirmed.pickup')}: {formatDate(request.preferred_date)} · {t(`windows.${request.time_window}`)}
+            <Icon name="event" size={18} />
+            <Text variant="label" style={{ flex: 1 }}>
+              {t('confirmed.pickup')}: {formatDate(request.route_date)} · {t(`modes.${request.pickup_mode}`)}
             </Text>
           </Row>
         </Card>
+
+        {request.pickup_mode === 'doorstep' ? (
+          <Card tone="secondary" style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <IconTile name="door-front" size={44} bg={colors.surfaceContainerLowest} />
+            <Text variant="label" style={{ flex: 1 }}>
+              {t('confirmed.doorstepReminder', { date: formatDate(request.route_date, { weekday: 'long' }) })}
+            </Text>
+          </Card>
+        ) : null}
 
         <Card tone="primary" style={{ flexDirection: 'row', alignItems: 'center' }}>
           <IconTile name="eco" bg="rgba(255,255,255,0.15)" color={colors.primaryFixed} />

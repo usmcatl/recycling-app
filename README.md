@@ -12,22 +12,39 @@ Built with Expo (React Native, SDK 57) + Expo Router, backed by Supabase. One co
 
 ## How it works
 
+Pickups run on **community route days**, like Ridwell: each community is collected on one
+weekday (Ajijic on Tuesdays, Chapala on Thursdays, …). Donors sign up for an upcoming route day
+until **8:00 PM the night before**, when stops lock so the driver can plan. A driver takes the
+whole route, either for one day or **every week**, the way Olio volunteers hold collection slots.
+
 **Donors**
-1. Sign in with an emailed 6-digit code (no passwords).
-2. Set up a profile: name, WhatsApp, community, pickup address (optionally pinned with GPS).
-3. Request a pickup in three steps: materials → day & time window → bags, instructions, address.
-4. Follow the request live: driver assigned → on the way (with map) → collected → delivered.
-5. See their history, badges, and the community leaderboard (kg diverted).
+1. Sign in with an emailed 6-digit code (no passwords) and agree to the code of conduct.
+2. Set up a profile: name, WhatsApp, community (which sets the route day), and pickup address.
+3. Request a pickup: materials → route date → **leave at the door** (default; no need to be
+   home, the driver photographs the bags) or **hand over in person**.
+4. Follow the request: driver assigned → route in progress (live map) → collected → delivered.
+5. Rate the driver (1–5 stars, quick tags, optional comment) and see history, badges and the
+   leaderboard.
 
 **Drivers (RecycleDrive)**
-1. Go **Active** to appear online and share location; **Offline** hides them.
-2. See open requests on a map and in a list sorted by distance, then accept one.
-3. Call / WhatsApp the donor (contact details appear only after accepting).
-4. Mark *on my way* → *collected* (enter weight in kg) → *delivered to the center*.
-   Or hand the pickup back, or report that it couldn't be collected.
+1. Browse upcoming routes and take a day, or hold a community **every week**. Weekly routes
+   are assigned automatically as donors sign up. Up to 2 routes per day; skip a day if needed.
+2. On the route day, start the route. Stops are ordered by distance from the recycling center.
+3. At each stop: **doorstep** means take a photo of the bags, enter the weight, and mark collected.
+   **In person** means tap *I've arrived*; a no-show can only be recorded after waiting 5 minutes
+   *and* calling or messaging the donor.
+4. Deliver everything to the center, then rate each donor.
 
-Request lifecycle: `open → claimed → en_route → picked_up → deposited`
-(plus `cancelled` by the donor or `no_show` by the driver).
+**Trust**: everyone has a visible record: average rating, completed pickups, missed pickups,
+and late cancellations (a donor cancelling, or a driver skipping, after the 8 PM cutoff).
+
+Stop lifecycle: `open → claimed → en_route → picked_up → deposited`
+(plus `cancelled` by the donor or `no_show` by the driver). Route lifecycle:
+`open → claimed → in_progress → completed`.
+
+The route-day schedule, cutoff hour, daily cap and wait time live in `src/lib/constants.ts`
+(the schedule is mirrored in the `route_schedule` table). **The days are placeholders until the
+recycling center confirms when it receives deliveries.**
 
 ## Running it
 
@@ -65,6 +82,10 @@ npm install
 npm run build:apk
 ```
 
+On Windows, build from a short folder path such as `C:\rc` (for example
+`git worktree add C:\rc <branch>` followed by `npm ci` there). The Android native build creates
+paths longer than Windows' 260-character limit when the project sits deep under `C:\Users\…`.
+
 The APK lands in `android/app/build/outputs/apk/release/app-release.apk`. It's signed with the
 debug key, which is fine for testing and sideloading. Use a real release key before publishing
 to the Play Store. If `.env.local` has Supabase keys at build time, they're baked into the APK;
@@ -74,8 +95,10 @@ otherwise it runs in demo mode.
 
 1. Create a project at [supabase.com](https://supabase.com).
 2. In the SQL editor, run [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql).
-   It creates the tables, row-level security, the status-change functions, the leaderboard, and
-   the realtime publication.
+   It creates the tables, row-level security, the route/stop/rating functions, the private
+   `pickup-photos` storage bucket, the leaderboard, and the realtime publication.
+   `npm run test:db` runs the schema against an in-memory Postgres and checks the rules
+   (cutoffs, daily cap, photo and wait-before-no-show, who can see and rate what).
 3. **Authentication → Email templates → Magic Link**: include the code so users can type it, e.g.
    `Your Recycle Connect code: {{ .Token }}`. Then set up a custom SMTP sender under
    *Authentication → SMTP*; the built-in sender is heavily rate-limited.

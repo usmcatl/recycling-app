@@ -7,12 +7,14 @@ import { setLanguage } from '@/i18n';
 import type { Locale } from '@/lib/types';
 import { useSession } from '@/providers/session';
 import { colors, space } from '@/theme';
+import { ReputationLine, useReputation } from './rating';
 import { Avatar, BrandBar, Card, Icon, Row, Screen, Segmented, Text, type IconName } from './ui';
 
 /** Account tab shared by donors and drivers. `children` renders above the menu. */
 export function AccountScreen({ title, children }: { title: string; children?: ReactNode }) {
   const { t, i18n } = useTranslation();
   const { profile, saveProfile, signOut } = useSession();
+  const reputation = useReputation([profile?.id]);
   if (!profile) return null;
 
   async function changeLanguage(locale: Locale) {
@@ -36,6 +38,11 @@ export function AccountScreen({ title, children }: { title: string; children?: R
           </View>
         </Row>
 
+        <Card tone="low" style={{ gap: space.sm }}>
+          <Text variant="eyebrow">{t('account.yourRecord')}</Text>
+          <ReputationLine reputation={reputation[profile.id]} />
+        </Card>
+
         {children}
 
         <Card tone="low" style={{ gap: space.sm }}>
@@ -54,6 +61,7 @@ export function AccountScreen({ title, children }: { title: string; children?: R
           <MenuItem icon="edit" label={t('account.editProfile')} onPress={() => router.push({ pathname: '/profile-setup', params: { edit: '1' } })} />
           <MenuItem icon="notifications" label={t('account.notifications')} onPress={() => router.push('/notifications')} />
           <MenuItem icon="help-outline" label={t('account.help')} onPress={() => router.push('/help')} />
+          <MenuItem icon="gavel" label={t('account.conduct')} onPress={() => router.push('/conduct')} />
           <MenuItem
             icon="swap-horiz"
             label={otherRole === 'driver' ? t('account.switchToDriver') : t('account.switchToDonor')}

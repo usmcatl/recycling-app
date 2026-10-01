@@ -4,15 +4,11 @@ import { View } from 'react-native';
 import { RequestCard } from '@/components/requests';
 import { BrandBar, Card, Row, Screen, Stat, Text } from '@/components/ui';
 import { formatKg } from '@/lib/format';
-import { useDriverData } from '@/lib/use-driver-data';
-import { useDriver } from '@/providers/driver';
+import { useClosedStops } from '@/lib/use-driver-data';
 
 export default function DriverHistory() {
   const { t } = useTranslation();
-  const { position } = useDriver();
-  const { closed } = useDriverData(position);
-  const delivered = closed.filter((r) => r.status === 'deposited');
-  const kg = delivered.reduce((s, r) => s + (r.actual_kg ?? r.estimated_kg), 0);
+  const { closed, delivered, kg } = useClosedStops();
 
   return (
     <View style={{ flex: 1 }}>
@@ -31,7 +27,7 @@ export default function DriverHistory() {
             <Text>{t('driver.historyEmpty')}</Text>
           </Card>
         ) : (
-          closed.map((r) => <RequestCard key={r.id} request={r} onPress={() => router.push(`/case/${r.id}`)} />)
+          closed.map((r) => <RequestCard key={r.id} request={r} showDonor onPress={() => router.push(`/case/${r.id}`)} />)
         )}
       </Screen>
     </View>

@@ -1,13 +1,13 @@
 import { createContext, useContext, useState, type ReactNode } from 'react';
-import { toIsoDate } from '@/lib/format';
-import type { MaterialId, TimeWindow } from '@/lib/types';
+import type { MaterialId, PickupMode } from '@/lib/types';
 
 /** Answers collected across the three "request a pickup" steps. */
 export type Draft = {
   materials: MaterialId[];
   otherMaterial: string;
-  date: string;
-  window: TimeWindow;
+  /** chosen route day (YYYY-MM-DD); empty until the donor picks one */
+  routeDate: string;
+  mode: PickupMode;
   bags: number;
   instructions: string;
 };
@@ -18,17 +18,11 @@ type Ctx = {
   reset(): void;
 };
 
-function tomorrow() {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  return toIsoDate(d);
-}
-
 const initial = (): Draft => ({
   materials: [],
   otherMaterial: '',
-  date: tomorrow(),
-  window: 'morning',
+  routeDate: '',
+  mode: 'doorstep',
   bags: 2,
   instructions: '',
 });

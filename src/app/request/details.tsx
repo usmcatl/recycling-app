@@ -2,10 +2,9 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, View } from 'react-native';
-import { useMaterialsLabel } from '@/components/requests';
+import { useDateLabel, useMaterialsLabel } from '@/components/requests';
 import { Button, Card, ErrorText, Field, Header, Icon, IconTile, Row, Screen, Text } from '@/components/ui';
 import { api } from '@/lib/api';
-import { formatDate } from '@/lib/format';
 import { useRequestDraft } from '@/providers/request-draft';
 import { useSession } from '@/providers/session';
 import { colors, fonts, radius, space } from '@/theme';
@@ -15,10 +14,11 @@ export default function RequestDetails() {
   const { profile } = useSession();
   const { draft, update, reset } = useRequestDraft();
   const materialsLabel = useMaterialsLabel();
+  const dateLabel = useDateLabel();
   const [error, setError] = useState<string | null>(null);
 
   async function submit() {
-    if (!profile?.address) {
+    if (!profile?.address || !profile.community) {
       setError(t('profile.addressRequired'));
       return;
     }
@@ -28,8 +28,8 @@ export default function RequestDetails() {
         materials: draft.materials,
         other_material: draft.materials.includes('other') ? draft.otherMaterial.trim() : null,
         bag_count: draft.bags,
-        preferred_date: draft.date,
-        time_window: draft.window,
+        route_date: draft.routeDate,
+        pickup_mode: draft.mode,
         instructions: draft.instructions.trim() || null,
         address: profile.address,
         community: profile.community,
@@ -54,7 +54,7 @@ export default function RequestDetails() {
           <Text variant="eyebrow">{t('detailsStep.summary')}</Text>
           <Text variant="title">{materialsLabel(draft.materials, draft.otherMaterial)}</Text>
           <Text variant="bodySmall">
-            {formatDate(draft.date)} · {t(`windows.${draft.window}`)}
+            {draft.routeDate ? dateLabel(draft.routeDate) : '—'} · {t(`modes.${draft.mode}`)}
           </Text>
         </Card>
 

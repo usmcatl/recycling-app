@@ -6,6 +6,8 @@ import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, View } from 'rea
 import { Button, Card, ErrorText, Field, Header, Icon, Row, Screen, Segmented, Text } from '@/components/ui';
 import { currentLocale } from '@/i18n';
 import { COMMUNITIES } from '@/lib/constants';
+import { weekdayName } from '@/lib/format';
+import { routeWeekday } from '@/lib/schedule';
 import type { Role } from '@/lib/types';
 import { useSession } from '@/providers/session';
 import { colors, fonts, radius, space } from '@/theme';
@@ -32,6 +34,8 @@ export default function ProfileSetup() {
   const [plate, setPlate] = useState(profile?.vehicle_plate ?? '');
   const [error, setError] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
+  const [agreed, setAgreed] = useState(!!profile?.conduct_accepted_at);
+  const communityDay = routeWeekday(community);
 
   if (!userId) return <Redirect href="/" />;
   if (profile && !editing && !params.role) {
@@ -68,6 +72,7 @@ export default function ProfileSetup() {
     setError(null);
     if (!fullName.trim()) return setError(t('profile.required'));
     if (role === 'donor' && !address.trim()) return setError(t('profile.addressRequired'));
+    if (!agreed) return setError(t('profile.conductRequired'));
     try {
       const saved = await saveProfile({
         role,
@@ -82,6 +87,7 @@ export default function ProfileSetup() {
         vehicle_model: model.trim() || null,
         vehicle_color: color.trim() || null,
         vehicle_plate: plate.trim() || null,
+        conduct_accepted_at: profile?.conduct_accepted_at ?? new Date().toISOString(),
       });
       if (editing && router.canGoBack()) router.back();
       else router.replace(saved.role === 'driver' ? '/map' : '/home');
@@ -138,6 +144,14 @@ export default function ProfileSetup() {
               );
             })}
           </View>
+          {communityDay != null ? (
+            <Row gap={6}>
+              <Icon name="event-repeat" size={18} color={colors.primary} />
+              <Text variant="label" style={{ color: colors.primary }}>
+                {t('profile.routeDay', { day: weekdayName(communityDay) })}
+              </Text>
+            </Row>
+          ) : null}
 
           {role === 'donor' ? (
             <>
@@ -186,6 +200,25 @@ export default function ProfileSetup() {
               </View>
             </Row>
           </Card>
+        ) : null}
+
+        {!profile?.conduct_accepted_at ? (
+          <Row gap={space.sm}>
+            <Pressable
+              onPress={() => setAgreed((a) => !a)}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: agreed }}
+              hitSlop={8}
+            >
+              <Icon name={agreed ? 'check-box' : 'check-box-outline-blank'} color={colors.primary} />
+            </Pressable>
+            <Text style={{ flex: 1 }}>
+              {t('profile.agreeConduct')}{' '}
+              <Text style={{ color: colors.primary, textDecorationLine: 'underline' }} onPress={() => router.push('/conduct')}>
+                {t('profile.conductLink')}
+              </Text>
+            </Text>
+          </Row>
         ) : null}
 
         <ErrorText message={error} />

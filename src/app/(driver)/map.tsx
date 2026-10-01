@@ -3,13 +3,16 @@ import { useTranslation } from 'react-i18next';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Map, type MapPin } from '@/components/Map';
-import { StatusChip, useMaterialsLabel } from '@/components/requests';
-import { Avatar, Button, Card, Chip, DemoBanner, Icon, IconTile, Row, Stat, Text } from '@/components/ui';
+import { useDateLabel, useMaterialsLabel } from '@/components/requests';
+import { RouteCard } from '@/components/RouteCard';
+import { Avatar, Button, Card, DemoBanner, IconTile, Row, Stat, Text } from '@/components/ui';
 import { api } from '@/lib/api';
 import { RECYCLING_CENTER } from '@/lib/constants';
-import { formatDistance, formatKg } from '@/lib/format';
+import { distanceKm, formatDistance, formatKg, orderStops } from '@/lib/format';
+import { todayIso } from '@/lib/schedule';
 import type { PickupRequest } from '@/lib/types';
-import { useDriverData } from '@/lib/use-driver-data';
+import { useData } from '@/lib/use-data';
+import { useDriverRoutes } from '@/lib/use-driver-data';
 import { useDriver } from '@/providers/driver';
 import { useSession } from '@/providers/session';
 import { ambientShadow, colors, fonts, radius, space } from '@/theme';
@@ -19,32 +22,37 @@ export default function DriverMap() {
   const insets = useSafeAreaInsets();
   const { profile } = useSession();
   const { active, setActive, position, locationDenied } = useDriver();
-  const { open, inHand, closed, reload, distanceTo } = useDriverData(position);
+  const { current, next, board } = useDriverRoutes();
   const materialsLabel = useMaterialsLabel();
+  const dateLabel = useDateLabel();
 
-  const current = inHand[0] ?? null;
-  const today = new Date().toISOString().slice(0, 10);
-  const doneToday = closed.filter((r) => r.status === 'deposited' && r.deposited_at?.slice(0, 10) === today);
-  const kgToday = doneToday.reduce((s, r) => s + (r.actual_kg ?? r.estimated_kg), 0);
+  const routeId = current?.id ?? null;
+  const { data: stops } = useData(async () => (routeId ? api.listRouteStops(routeId) : []), [routeId, current?.status]);
+  const ordered = orderStops(stops ?? [], position ?? RECYCLING_CENTER.location);
+  const nextStop = ordered.find((s) => s.status === 'en_route') ?? null;
+
+  const today = todayIso();
+  const doneToday = board.filter((r) => r.driver_id === profile?.id && r.status === 'completed' && r.route_date === today);
+  const kgToday = doneToday.reduce((s, r) => s + r.estimated_kg, 0);
 
   const pins: MapPin[] = [
-    ...open.filter(hasCoords).map((r) => ({ id: r.id, kind: 'pickup' as const, position: { lat: r.lat!, lng: r.lng! }, title: r.community ?? r.address })),
-    ...inHand.filter(hasCoords).map((r) => ({ id: r.id, kind: 'active' as const, position: { lat: r.lat!, lng: r.lng! }, title: `#${r.case_code}` })),
+    ...ordered
+      .filter((s) => s.lat != null && s.lng != null)
+      .map((s) => ({
+        id: s.id,
+        kind: (s === nextStop ? 'active' : s.status === 'en_route' || s.status === 'claimed' ? 'pickup' : 'home') as MapPin['kind'],
+        position: { lat: s.lat!, lng: s.lng! },
+        title: s.address,
+      })),
     { id: 'center', kind: 'center', position: RECYCLING_CENTER.location, title: RECYCLING_CENTER.name },
   ];
 
-  const nearest = open[0];
-  const nearestKm = nearest ? distanceTo(nearest) : null;
+  const focus = nextStop && nextStop.lat != null && nextStop.lng != null ? { lat: nextStop.lat, lng: nextStop.lng } : position;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
       {active ? (
-        <Map
-          pins={pins}
-          focus={position}
-          me={position}
-          onPinPress={(id) => id !== 'center' && router.push(`/case/${id}`)}
-        />
+        <Map pins={pins} focus={focus} me={position} onPinPress={(id) => id !== 'center' && router.push(`/case/${id}`)} />
       ) : null}
 
       <View style={[styles.top, { paddingTop: insets.top + space.sm }]}>
@@ -94,6 +102,9 @@ export default function DriverMap() {
               <Stat value={formatKg(kgToday)} label={t('driver.kgCollected')} />
             </Card>
           </Row>
+          {next ? (
+            <RouteCard route={next} onPress={() => router.push(`/route/${next.id}`)} />
+          ) : null}
         </View>
       ) : (
         <View style={styles.sheetWrap} pointerEvents="box-none">
@@ -102,31 +113,24 @@ export default function DriverMap() {
               <Text variant="bodySmall">{t('driver.locationNeeded')}</Text>
             </Card>
           ) : null}
-          {nearestKm != null && !current ? (
-            <View style={styles.nearest}>
-              <Text variant="label" style={{ color: colors.primary }}>
-                {t('driver.nearest', { distance: formatDistance(nearestKm) })}
-              </Text>
-            </View>
-          ) : null}
-          {current ? (
-            <CurrentCase request={current} distance={distanceTo(current)} onChanged={reload} label={materialsLabel(current.materials, current.other_material)} />
+          {nextStop ? (
+            <NextStopCard stop={nextStop} distance={position && focus ? distanceKm(position, focus) : null} label={materialsLabel(nextStop.materials, nextStop.other_material)} />
           ) : (
             <Card style={[styles.sheet, ambientShadow]}>
-              <Text variant="eyebrow">{t('driver.openRequests')}</Text>
-              {nearest ? (
+              <Text variant="eyebrow">{current ? t('driver.todayRoute') : t('driver.nextRoute')}</Text>
+              {current ?? next ? (
                 <>
-                  <Text variant="headline">{nearest.community ?? nearest.address}</Text>
+                  <Text variant="headline">{(current ?? next)!.community}</Text>
                   <Text variant="bodySmall">
-                    {materialsLabel(nearest.materials, nearest.other_material)} · {t('common.bags', { count: nearest.bag_count })}
+                    {dateLabel((current ?? next)!.route_date)} · {t('common.stops', { count: (current ?? next)!.stop_count })}
                   </Text>
-                  <Row>
-                    <Button label={t('driver.viewCase')} icon="arrow-forward" onPress={() => router.push(`/case/${nearest.id}`)} style={{ flex: 1 }} />
-                    <Button variant="secondary" label={`${open.length}`} icon="route" onPress={() => router.push('/routes')} />
-                  </Row>
+                  <Button label={t('driver.viewRoute')} icon="arrow-forward" onPress={() => router.push(`/route/${(current ?? next)!.id}`)} />
                 </>
               ) : (
-                <Text>{t('driver.noOpen')}</Text>
+                <>
+                  <Text>{t('driver.noRoutes')}</Text>
+                  <Button label={t('driver.findRoutes')} icon="route" onPress={() => router.push('/routes')} />
+                </>
               )}
             </Card>
           )}
@@ -136,64 +140,22 @@ export default function DriverMap() {
   );
 }
 
-function CurrentCase({ request: r, distance, onChanged, label }: {
-  request: PickupRequest;
-  distance: number | null;
-  onChanged: () => void;
-  label: string;
-}) {
+function NextStopCard({ stop, distance, label }: { stop: PickupRequest; distance: number | null; label: string }) {
   const { t } = useTranslation();
-  const collected = r.status === 'picked_up';
-
   return (
     <Card style={[styles.sheet, ambientShadow]}>
-      <Row style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <View style={{ gap: 6, flex: 1 }}>
-          <Chip label={label} tone="tertiary" icon="recycling" />
-          <StatusChip status={r.status} />
-          <Text variant="bodySmall">
-            {t('common.caseId')}: #{r.case_code}
-          </Text>
-        </View>
-        <IconTile name="local-shipping" size={52} />
-      </Row>
-      <Text variant="headline">{r.address}</Text>
+      <Text variant="eyebrow">{t('driver.nextStop')}</Text>
+      <Text variant="headline">{stop.donor?.full_name ?? stop.address}</Text>
       <Text variant="bodySmall">
-        {[r.community, distance != null ? t('driver.away', { distance: formatDistance(distance) }) : null].filter(Boolean).join(' · ')}
+        {[stop.address, distance != null ? t('driver.away', { distance: formatDistance(distance) }) : null].filter(Boolean).join(' · ')}
       </Text>
-
-      <Pressable onPress={() => router.push(`/case/${r.id}`)} accessibilityRole="checkbox" accessibilityState={{ checked: collected }}>
-        <Row gap={space.sm}>
-          <Icon name={collected ? 'check-box' : 'check-box-outline-blank'} />
-          <Text variant="label" style={{ fontSize: 15 }}>
-            {t('driver.pickupCompleted')}
-          </Text>
-        </Row>
-      </Pressable>
-      <Pressable
-        disabled={!collected}
-        onPress={async () => {
-          await api.advanceRequest(r.id, 'deposited');
-          onChanged();
-        }}
-        accessibilityRole="checkbox"
-        accessibilityState={{ checked: false, disabled: !collected }}
-        style={{ opacity: collected ? 1 : 0.45 }}
-      >
-        <Row gap={space.sm}>
-          <Icon name="check-box-outline-blank" />
-          <Text variant="label" style={{ fontSize: 15 }}>
-            {t('driver.deposited')}
-          </Text>
-        </Row>
-      </Pressable>
-
-      <Button label={t('driver.viewCase')} icon="arrow-forward" onPress={() => router.push(`/case/${r.id}`)} />
+      <Text variant="bodySmall">
+        {t(`modes.${stop.pickup_mode}`)} · {t('common.bags', { count: stop.bag_count })} · {label}
+      </Text>
+      <Button label={t('driver.viewStop')} icon="arrow-forward" onPress={() => router.push(`/case/${stop.id}`)} />
     </Card>
   );
 }
-
-const hasCoords = (r: PickupRequest) => r.lat != null && r.lng != null;
 
 const styles = StyleSheet.create({
   top: {
@@ -222,12 +184,4 @@ const styles = StyleSheet.create({
   offline: { flex: 1, padding: space.lg, gap: space.lg, justifyContent: 'center' },
   sheetWrap: { position: 'absolute', left: space.md, right: space.md, bottom: 100 },
   sheet: { borderRadius: radius.xl },
-  nearest: {
-    alignSelf: 'flex-end',
-    backgroundColor: colors.surfaceContainerLowest,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: radius.md,
-    marginBottom: space.sm,
-  },
 });

@@ -7,8 +7,10 @@ import type {
   PickupRequest,
   Profile,
   ProfileInput,
+  Rating,
   RequestDraft,
-  RequestStatus,
+  Reputation,
+  Route,
 } from './types';
 
 /**
@@ -37,18 +39,44 @@ export interface Api {
   // shared
   getRequest(id: string): Promise<PickupRequest | null>;
   subscribeRequest(id: string, cb: (r: PickupRequest) => void): () => void;
+  /** Turn a stored photo reference into something an <Image> can show. */
+  photoUrl(ref: string): Promise<string | null>;
 
-  // driver
-  listOpenRequests(): Promise<PickupRequest[]>;
-  listMyCases(): Promise<PickupRequest[]>;
-  subscribeRequests(cb: () => void): () => void;
-  claimRequest(id: string): Promise<void>;
-  releaseRequest(id: string): Promise<void>;
-  advanceRequest(id: string, status: RequestStatus, opts?: { kg?: number; note?: string }): Promise<void>;
+  // driver: routes
+  /** Routes from today through `days` ahead, with stop counts. */
+  routeBoard(days: number): Promise<Route[]>;
+  getRoute(id: string): Promise<Route | null>;
+  listRouteStops(routeId: string): Promise<PickupRequest[]>;
+  /** Communities this driver holds every week. */
+  listMyCommitments(): Promise<string[]>;
+  subscribeRoutes(cb: () => void): () => void;
+  claimRoute(routeId: string, everyWeek: boolean): Promise<void>;
+  skipRoute(routeId: string): Promise<void>;
+  endCommitment(community: string): Promise<void>;
+  startRoute(routeId: string): Promise<void>;
+  completeRoute(routeId: string): Promise<void>;
+  /** Stops this driver has handled (history). */
+  listMyStops(): Promise<PickupRequest[]>;
+
+  // driver: stops
+  markArrived(requestId: string): Promise<void>;
+  markContacted(requestId: string): Promise<void>;
+  /** Upload a photo of the bags; returns a reference to pass to collect/noShow. */
+  uploadPhoto(requestId: string, localUri: string): Promise<string>;
+  collectStop(requestId: string, opts: { kg?: number; photo?: string }): Promise<void>;
+  noShowStop(requestId: string, opts: { note: string; photo?: string }): Promise<void>;
+
+  // driver: presence
   setActive(active: boolean): Promise<void>;
   updateLocation(pos: LatLng): Promise<void>;
   getDriverLocation(driverId: string): Promise<LatLng | null>;
   subscribeDriverLocation(driverId: string, cb: (pos: LatLng) => void): () => void;
+
+  // ratings & reputation
+  rate(requestId: string, stars: number, tags: string[], comment: string | null): Promise<void>;
+  /** The rating the current user gave on a request, if any. */
+  myRating(requestId: string): Promise<Rating | null>;
+  reputation(userIds: string[]): Promise<Record<string, Reputation>>;
 
   // impact
   leaderboard(period: 'month' | 'all'): Promise<LeaderboardRow[]>;

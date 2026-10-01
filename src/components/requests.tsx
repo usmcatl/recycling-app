@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { View } from 'react-native';
-import { formatDate, formatKg } from '@/lib/format';
-import type { MaterialId, PickupRequest, RequestStatus } from '@/lib/types';
+import { daysUntil, formatDate, formatKg } from '@/lib/format';
+import type { MaterialId, PickupRequest, RequestStatus, RouteStatus } from '@/lib/types';
 import { colors, space } from '@/theme';
 import { Card, Chip, Icon, ProgressBar, Row, Text } from './ui';
 
@@ -17,39 +17,55 @@ export function StatusChip({ status }: { status: RequestStatus }) {
   return <Chip label={t(`status.${status}`)} tone={statusTone(status)} />;
 }
 
+export function RouteStatusChip({ status }: { status: RouteStatus }) {
+  const { t } = useTranslation();
+  const tone = status === 'open' ? 'neutral' : status === 'completed' ? 'secondary' : 'tertiary';
+  return <Chip label={t(`routeStatus.${status}`)} tone={tone} />;
+}
+
 export function useMaterialsLabel() {
   const { t } = useTranslation();
   return (materials: MaterialId[], other?: string | null) =>
     materials.map((m) => (m === 'other' && other ? other : t(`materials.${m}`))).join(', ');
 }
 
-/** Compact card used in history lists and driver queues. */
-export function RequestCard({ request, onPress, trailing }: {
+/** "Today" / "Tomorrow" / "Tue, Oct 6" */
+export function useDateLabel() {
+  const { t } = useTranslation();
+  return (isoDate: string) => {
+    const d = daysUntil(isoDate);
+    if (d === 0) return t('common.today');
+    if (d === 1) return t('common.tomorrow');
+    return formatDate(isoDate);
+  };
+}
+
+/** Compact card used in history lists and route stop lists. */
+export function RequestCard({ request, onPress, trailing, showDonor }: {
   request: PickupRequest;
   onPress?: () => void;
   trailing?: string;
+  showDonor?: boolean;
 }) {
   const { t } = useTranslation();
   const label = useMaterialsLabel();
+  const dateLabel = useDateLabel();
   const kg = request.actual_kg ?? request.estimated_kg;
   return (
     <Card onPress={onPress}>
       <Row style={{ justifyContent: 'space-between' }}>
-        <Text variant="eyebrow">
-          {t('common.caseId')} #{request.case_code}
-        </Text>
+        <Text variant="eyebrow">#{request.case_code}</Text>
         <StatusChip status={request.status} />
       </Row>
-      <Text variant="title">{label(request.materials, request.other_material)}</Text>
+      <Text variant="title">{showDonor && request.donor ? request.donor.full_name : label(request.materials, request.other_material)}</Text>
       <Text variant="bodySmall">
-        {formatDate(request.preferred_date)} · {t(`windows.${request.time_window}`)} ·{' '}
-        {t('common.bags', { count: request.bag_count })}
+        {dateLabel(request.route_date)} · {t(`modes.${request.pickup_mode}`)} · {t('common.bags', { count: request.bag_count })}
       </Text>
       <Row style={{ justifyContent: 'space-between' }}>
         <Row gap={6} style={{ flex: 1 }}>
           <Icon name="location-on" size={16} color={colors.outline} />
           <Text variant="bodySmall" numberOfLines={1} style={{ flex: 1 }}>
-            {request.community ?? request.address}
+            {showDonor ? request.address : request.community}
           </Text>
         </Row>
         <Text variant="label" style={{ color: colors.primary }}>

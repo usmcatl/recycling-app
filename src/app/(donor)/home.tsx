@@ -1,11 +1,12 @@
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { View } from 'react-native';
-import { RequestCard } from '@/components/requests';
+import { RequestCard, useDateLabel } from '@/components/requests';
 import { BrandBar, Button, Card, DemoBanner, IconTile, ProgressBar, Row, Screen, Stat, Text } from '@/components/ui';
 import { api } from '@/lib/api';
 import { ACTIVE_STATUSES, badgeFor } from '@/lib/constants';
-import { formatKg } from '@/lib/format';
+import { formatKg, formatTime, weekdayName } from '@/lib/format';
+import { cutoffFor, routeWeekday, upcomingRouteDates } from '@/lib/schedule';
 import { useData } from '@/lib/use-data';
 import { useSession } from '@/providers/session';
 import { colors, space } from '@/theme';
@@ -20,6 +21,9 @@ export default function DonorHome() {
   const kg = done.reduce((sum, r) => sum + (r.actual_kg ?? r.estimated_kg), 0);
   const badge = badgeFor(kg);
   const firstName = profile?.full_name.split(' ')[0] ?? '';
+  const dateLabel = useDateLabel();
+  const weekday = routeWeekday(profile?.community);
+  const nextDate = upcomingRouteDates(profile?.community, 1)[0];
 
   return (
     <View style={{ flex: 1 }}>
@@ -34,7 +38,16 @@ export default function DonorHome() {
         <Card tone="secondary" style={{ padding: space.xl }}>
           <IconTile name="recycling" bg={colors.surfaceContainerLowest} />
           <Text variant="headline">{t('donorHome.requestPickup')}</Text>
-          <Text>{t('donorHome.requestBody')}</Text>
+          <Text>
+            {weekday != null
+              ? t('donorHome.requestBody', { day: weekdayName(weekday), cutoff: formatTime(cutoffFor('2023-01-02')) })
+              : t('donorHome.requestBodyNoRoute')}
+          </Text>
+          {nextDate ? (
+            <Text variant="label" style={{ color: colors.primary }}>
+              {t('donorHome.nextRoute', { community: profile?.community, date: dateLabel(nextDate) })}
+            </Text>
+          ) : null}
           <Button
             label={t('donorHome.requestPickup')}
             icon="arrow-forward"

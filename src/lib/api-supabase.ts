@@ -3,12 +3,15 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { AppState } from 'react-native';
 import type { Api } from './api';
 import { KG_PER_BAG } from './constants';
-import type { PickupRequest, Profile } from './types';
+import { toIsoDate } from './format';
+import type { PickupRequest, Profile, Rating, Reputation, Route } from './types';
 
 const url = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const key = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
 export const isSupabaseConfigured = Boolean(url && key);
+
+const PHOTO_BUCKET = 'pickup-photos';
 
 let client: SupabaseClient | null = null;
 
@@ -50,6 +53,30 @@ function startOfMonth() {
   return new Date(d.getFullYear(), d.getMonth(), 1).toISOString();
 }
 
+function toRoute(r: Record<string, unknown>): Route {
+  return {
+    ...(r as unknown as Route),
+    stop_count: Number(r.stop_count ?? 0),
+    estimated_kg: Number(r.estimated_kg ?? 0),
+  };
+}
+
+async function board(from: string, to: string) {
+  const rows = unwrap(await db().rpc('route_board', { p_from: from, p_to: to })) as Record<string, unknown>[];
+  return rows.map(toRoute);
+}
+
+/** Subscribe to any change on a table; returns an unsubscribe function. */
+function watch(name: string, table: string, cb: () => void, filter?: string) {
+  const channel = db()
+    .channel(name)
+    .on('postgres_changes', { event: '*', schema: 'public', table, ...(filter ? { filter } : {}) }, () => cb())
+    .subscribe();
+  return () => {
+    db().removeChannel(channel);
+  };
+}
+
 export const supabaseApi: Api = {
   mode: 'supabase',
 
@@ -88,20 +115,29 @@ export const supabaseApi: Api = {
     return unwrap(await db().from('profiles').upsert(row).select('*').single()) as Profile;
   },
 
-  async createRequest(draft) {
-    const donor_id = await uid();
-    const row = { ...draft, donor_id, estimated_kg: draft.bag_count * KG_PER_BAG };
-    return unwrap(await db().from('pickup_requests').insert(row).select(REQUEST_SELECT).single()) as PickupRequest;
+  async createRequest(d) {
+    const created = unwrap(
+      await db().rpc('create_request', {
+        p_materials: d.materials,
+        p_other_material: d.other_material,
+        p_bag_count: d.bag_count,
+        p_route_date: d.route_date,
+        p_mode: d.pickup_mode,
+        p_instructions: d.instructions,
+        p_address: d.address,
+        p_community: d.community,
+        p_lat: d.lat,
+        p_lng: d.lng,
+        p_estimated_kg: d.bag_count * KG_PER_BAG,
+      }),
+    ) as PickupRequest;
+    return (await supabaseApi.getRequest(created.id)) ?? created;
   },
 
   async listMyRequests() {
     const id = await uid();
     return unwrap(
-      await db()
-        .from('pickup_requests')
-        .select(REQUEST_SELECT)
-        .eq('donor_id', id)
-        .order('created_at', { ascending: false }),
+      await db().from('pickup_requests').select(REQUEST_SELECT).eq('donor_id', id).order('created_at', { ascending: false }),
     ) as PickupRequest[];
   },
 
@@ -110,76 +146,104 @@ export const supabaseApi: Api = {
   },
 
   async getRequest(id) {
-    return unwrap(
-      await db().from('pickup_requests').select(REQUEST_SELECT).eq('id', id).maybeSingle(),
-    ) as PickupRequest | null;
+    return unwrap(await db().from('pickup_requests').select(REQUEST_SELECT).eq('id', id).maybeSingle()) as PickupRequest | null;
   },
 
   subscribeRequest(id, cb) {
-    const channel = db()
-      .channel(`request:${id}`)
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'pickup_requests', filter: `id=eq.${id}` },
-        async () => {
-          const fresh = await supabaseApi.getRequest(id);
-          if (fresh) cb(fresh);
-        },
-      )
-      .subscribe();
-    return () => {
-      db().removeChannel(channel);
-    };
+    return watch(`request:${id}`, 'pickup_requests', async () => {
+      const fresh = await supabaseApi.getRequest(id);
+      if (fresh) cb(fresh);
+    }, `id=eq.${id}`);
   },
 
-  async listOpenRequests() {
+  async photoUrl(ref) {
+    const { data } = await db().storage.from(PHOTO_BUCKET).createSignedUrl(ref, 60 * 60);
+    return data?.signedUrl ?? null;
+  },
+
+  async routeBoard(days) {
+    const from = new Date();
+    const to = new Date();
+    to.setDate(to.getDate() + days);
+    return board(toIsoDate(from), toIsoDate(to));
+  },
+
+  async getRoute(id) {
+    const row = unwrap(await db().from('routes').select('route_date').eq('id', id).maybeSingle()) as { route_date: string } | null;
+    if (!row) return null;
+    return (await board(row.route_date, row.route_date)).find((r) => r.id === id) ?? null;
+  },
+
+  async listRouteStops(routeId) {
     return unwrap(
-      await db()
-        .from('pickup_requests')
-        .select(REQUEST_SELECT)
-        .eq('status', 'open')
-        .order('preferred_date', { ascending: true }),
+      await db().from('pickup_requests').select(REQUEST_SELECT).eq('route_id', routeId).neq('status', 'cancelled'),
     ) as PickupRequest[];
   },
 
-  async listMyCases() {
+  async listMyCommitments() {
+    const id = await uid();
+    const rows = unwrap(await db().from('route_commitments').select('community').eq('driver_id', id)) as { community: string }[];
+    return rows.map((r) => r.community);
+  },
+
+  subscribeRoutes(cb) {
+    const offRoutes = watch('routes:all', 'routes', cb);
+    const offStops = watch('stops:all', 'pickup_requests', cb);
+    return () => {
+      offRoutes();
+      offStops();
+    };
+  },
+
+  async claimRoute(routeId, everyWeek) {
+    unwrap(await db().rpc('claim_route', { p_route: routeId, p_every_week: everyWeek }));
+  },
+
+  async skipRoute(routeId) {
+    unwrap(await db().rpc('skip_route', { p_route: routeId }));
+  },
+
+  async endCommitment(community) {
+    unwrap(await db().rpc('end_commitment', { p_community: community }));
+  },
+
+  async startRoute(routeId) {
+    unwrap(await db().rpc('start_route', { p_route: routeId }));
+  },
+
+  async completeRoute(routeId) {
+    unwrap(await db().rpc('complete_route', { p_route: routeId }));
+  },
+
+  async listMyStops() {
     const id = await uid();
     return unwrap(
-      await db()
-        .from('pickup_requests')
-        .select(REQUEST_SELECT)
-        .eq('driver_id', id)
-        .order('updated_at', { ascending: false }),
+      await db().from('pickup_requests').select(REQUEST_SELECT).eq('driver_id', id).order('updated_at', { ascending: false }),
     ) as PickupRequest[];
   },
 
-  subscribeRequests(cb) {
-    const channel = db()
-      .channel('requests:all')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'pickup_requests' }, () => cb())
-      .subscribe();
-    return () => {
-      db().removeChannel(channel);
-    };
+  async markArrived(requestId) {
+    unwrap(await db().rpc('mark_arrived', { request_id: requestId }));
   },
 
-  async claimRequest(id) {
-    unwrap(await db().rpc('claim_request', { request_id: id }));
+  async markContacted(requestId) {
+    unwrap(await db().rpc('mark_contacted', { request_id: requestId }));
   },
 
-  async releaseRequest(id) {
-    unwrap(await db().rpc('release_request', { request_id: id }));
+  async uploadPhoto(requestId, localUri) {
+    const body = await (await fetch(localUri)).arrayBuffer();
+    const path = `${requestId}/${Date.now()}.jpg`;
+    const { error } = await db().storage.from(PHOTO_BUCKET).upload(path, body, { contentType: 'image/jpeg' });
+    if (error) throw new Error(error.message);
+    return path;
   },
 
-  async advanceRequest(id, status, opts) {
-    unwrap(
-      await db().rpc('advance_request', {
-        request_id: id,
-        new_status: status,
-        kg: opts?.kg ?? null,
-        note: opts?.note ?? null,
-      }),
-    );
+  async collectStop(requestId, { kg, photo }) {
+    unwrap(await db().rpc('collect_stop', { request_id: requestId, kg: kg ?? null, photo: photo ?? null }));
+  },
+
+  async noShowStop(requestId, { note, photo }) {
+    unwrap(await db().rpc('no_show_stop', { request_id: requestId, note, photo: photo ?? null }));
   },
 
   async setActive(active) {
@@ -189,18 +253,13 @@ export const supabaseApi: Api = {
 
   async updateLocation({ lat, lng }) {
     const driver_id = await uid();
-    unwrap(
-      await db()
-        .from('driver_locations')
-        .upsert({ driver_id, lat, lng, updated_at: new Date().toISOString() }),
-    );
+    unwrap(await db().from('driver_locations').upsert({ driver_id, lat, lng, updated_at: new Date().toISOString() }));
   },
 
   async getDriverLocation(driverId) {
-    const row = unwrap(
+    return unwrap(
       await db().from('driver_locations').select('lat, lng').eq('driver_id', driverId).maybeSingle(),
     ) as { lat: number; lng: number } | null;
-    return row;
   },
 
   subscribeDriverLocation(driverId, cb) {
@@ -220,11 +279,45 @@ export const supabaseApi: Api = {
     };
   },
 
+  async rate(requestId, stars, tags, comment) {
+    unwrap(await db().rpc('rate_request', { p_request: requestId, p_stars: stars, p_tags: tags, p_comment: comment }));
+  },
+
+  async myRating(requestId) {
+    const id = await uid();
+    return unwrap(
+      await db().from('ratings').select('*').eq('request_id', requestId).eq('rater_id', id).maybeSingle(),
+    ) as Rating | null;
+  },
+
+  async reputation(userIds) {
+    if (userIds.length === 0) return {};
+    const rows = unwrap(await db().rpc('reputation', { user_ids: userIds })) as Record<string, unknown>[];
+    const out: Record<string, Reputation> = {};
+    for (const r of rows) {
+      out[r.user_id as string] = {
+        user_id: r.user_id as string,
+        rating_avg: r.rating_avg == null ? null : Number(r.rating_avg),
+        rating_count: Number(r.rating_count),
+        completed: Number(r.completed),
+        no_shows: Number(r.no_shows),
+        late_drops: Number(r.late_drops),
+      };
+    }
+    return out;
+  },
+
   async leaderboard(period) {
     const rows = unwrap(
       await db().rpc('leaderboard', { since: period === 'month' ? startOfMonth() : null, max_rows: 50 }),
-    ) as LeaderboardRowRaw[];
-    return rows.map((r) => ({ ...r, kg: Number(r.kg), pickups: Number(r.pickups), rank: Number(r.rank) }));
+    ) as Record<string, unknown>[];
+    return rows.map((r) => ({
+      user_id: r.user_id as string,
+      display_name: r.display_name as string,
+      kg: Number(r.kg),
+      pickups: Number(r.pickups),
+      rank: Number(r.rank),
+    }));
   },
 
   async communityStats() {
@@ -238,5 +331,3 @@ export const supabaseApi: Api = {
     };
   },
 };
-
-type LeaderboardRowRaw = { user_id: string; display_name: string; kg: string; pickups: string; rank: string };

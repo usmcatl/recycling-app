@@ -2,17 +2,13 @@ import { useTranslation } from 'react-i18next';
 import { AccountScreen } from '@/components/AccountScreen';
 import { Card, Row, Stat, Text } from '@/components/ui';
 import { formatKg } from '@/lib/format';
-import { useDriverData } from '@/lib/use-driver-data';
-import { useDriver } from '@/providers/driver';
+import { useClosedStops } from '@/lib/use-driver-data';
 import { useSession } from '@/providers/session';
 
 export default function DriverProfile() {
   const { t } = useTranslation();
   const { profile } = useSession();
-  const { position } = useDriver();
-  const { closed } = useDriverData(position);
-  const delivered = closed.filter((r) => r.status === 'deposited');
-  const kg = delivered.reduce((s, r) => s + (r.actual_kg ?? r.estimated_kg), 0);
+  const { delivered, kg } = useClosedStops();
   const vehicle = [profile?.vehicle_color, profile?.vehicle_make, profile?.vehicle_model].filter(Boolean).join(' ');
 
   return (
