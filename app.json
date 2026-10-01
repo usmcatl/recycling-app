@@ -1,25 +1,59 @@
 {
   "expo": {
-    "name": "recycle-tmp",
-    "slug": "recycle-tmp",
+    "name": "Recycle Connect",
+    "slug": "recycle-connect",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": false,
+      "bundleIdentifier": "mx.ajijicrecycling.recycleconnect",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Recycle Connect uses your location to set your pickup address and to show drivers nearby pickups."
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#F8FAF8",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "mx.ajijicrecycling.recycleconnect",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      "expo-sqlite",
+      "expo-localization",
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/logo.png",
+          "imageWidth": 220,
+          "backgroundColor": "#F8FAF8"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Recycle Connect uses your location to set your pickup address and to show drivers nearby pickups."
+        }
+      ]
+    ],
+    "scheme": "recycleconnect",
+    "experiments": {
+      "typedRoutes": true
     }
   }
 }
