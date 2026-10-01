@@ -1,0 +1,17 @@
+{
+  "name": "Recycle Connect",
+  "short_name": "Recycle",
+  "start_url": "/recycling-app/",
+  "scope": "/recycling-app/",
+  "display": "standalone",
+  "background_color": "#f8faf8",
+  "theme_color": "#004e49",
+  "icons": [
+    {
+      "src": "/recycling-app/app-icon.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
