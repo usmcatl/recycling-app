@@ -15,10 +15,8 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#F8FAF8",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#f9f9f9"
       },
       "predictiveBackGestureEnabled": false,
       "package": "mx.ajijicrecycling.recycleconnect",
@@ -28,7 +26,13 @@
       ]
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "output": "single",
+      "name": "Recycle Connect",
+      "shortName": "Recycle",
+      "themeColor": "#004e49",
+      "backgroundColor": "#f8faf8",
+      "lang": "es"
     },
     "plugins": [
       "expo-router",
@@ -39,9 +43,9 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/logo.png",
-          "imageWidth": 220,
-          "backgroundColor": "#F8FAF8"
+          "image": "./assets/icon.png",
+          "imageWidth": 200,
+          "backgroundColor": "#f9f9f9"
         }
       ],
       [
@@ -53,7 +57,8 @@
     ],
     "scheme": "recycleconnect",
     "experiments": {
-      "typedRoutes": true
+      "typedRoutes": true,
+      "baseUrl": "/recycling-app"
     }
   }
 }

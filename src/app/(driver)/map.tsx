@@ -42,7 +42,7 @@ export default function DriverMap() {
         <Map
           pins={pins}
           focus={position}
-          showsUserLocation
+          me={position}
           onPinPress={(id) => id !== 'center' && router.push(`/case/${id}`)}
         />
       ) : null}

@@ -4,7 +4,11 @@ A community app for the Lake Chapala (Lakeside) area: neighbors request a pickup
 recyclables, and volunteer drivers claim the request, collect it, and deliver it to the
 **Ajijic Recycling Center**. Bilingual (Spanish / English).
 
-Built with Expo (React Native, SDK 57) + Expo Router, backed by Supabase.
+Built with Expo (React Native, SDK 57) + Expo Router, backed by Supabase. One codebase ships as:
+
+- **Android app**: an APK built locally, downloadable from [Releases](https://github.com/usmcatl/recycling-app/releases).
+- **Mobile web app** for iPhone and everyone else: https://usmcatl.github.io/recycling-app/
+  (in Safari, tap Share → *Add to Home Screen* to get an app icon and full-screen view).
 
 ## How it works
 
@@ -29,27 +33,42 @@ Request lifecycle: `open → claimed → en_route → picked_up → deposited`
 
 ```bash
 npm install
-npx expo start
+npx expo start --web
 ```
 
-Scan the QR code with **Expo Go** on a phone. With no Supabase keys configured the app runs in
-**demo mode**: sample Lakeside data is stored on the device, any email signs in, and any
-6-digit code works. A blue banner marks demo mode.
+With no Supabase keys configured the app runs in **demo mode**: sample Lakeside data is stored
+on the device, any email signs in, and any 6-digit code works. A blue banner marks demo mode.
+Maps use OpenStreetMap, so no API key is needed.
 
-`npx expo start --web` gives a quick browser preview; the map is replaced by a placeholder there.
-
-## Building a test APK (Android)
+## Publishing the mobile web version
 
 ```bash
-npx eas-cli@latest login
-npx eas-cli@latest build -p android --profile preview
+npm run deploy:web
 ```
 
-The first run links the project to your Expo account (free) and generates a signing key. EAS
-builds in the cloud and gives you a link / QR code to download the `.apk`, which installs on any
-Android phone (allow "install unknown apps"). Without Supabase keys in the build, the APK runs in
-demo mode. To build against Supabase, add the two `EXPO_PUBLIC_SUPABASE_*` values as EAS
-environment variables (`npx eas-cli@latest env:create`) for the `preview` environment.
+This exports the web build to `dist/` and pushes it to the `gh-pages` branch, which GitHub Pages
+serves at https://usmcatl.github.io/recycling-app/.
+
+## Installing the APK (Android)
+
+Download `recycle-connect.apk` from the repo's
+[Releases](https://github.com/usmcatl/recycling-app/releases) page on the phone, open it, and
+allow "install unknown apps" when asked.
+
+## Building the APK yourself
+
+Everything builds locally. No Expo or other accounts are needed. Requirements: JDK 17 and the
+Android SDK (`ANDROID_HOME`, e.g. `%LOCALAPPDATA%\Android\Sdk`).
+
+```bash
+npm install
+npm run build:apk
+```
+
+The APK lands in `android/app/build/outputs/apk/release/app-release.apk`. It's signed with the
+debug key, which is fine for testing and sideloading. Use a real release key before publishing
+to the Play Store. If `.env.local` has Supabase keys at build time, they're baked into the APK;
+otherwise it runs in demo mode.
 
 ## Connecting Supabase
 
@@ -99,8 +118,6 @@ tonal surfaces instead of divider lines, gradient primary buttons.
 
 - [ ] Set the recycling center's real address and coordinates: `RECYCLING_CENTER` in `src/lib/constants.ts`.
 - [ ] Set the support email: `SUPPORT_EMAIL` in `src/lib/constants.ts`.
-- [ ] Add a square app icon (1024×1024) at `assets/icon.png` and update the Android adaptive icons.
-- [ ] Android builds: add a Google Maps API key (`android.config.googleMaps.apiKey` in `app.json`).
 - [ ] Push / WhatsApp notifications: preferences are saved, but sending them needs a server-side
       job (e.g. a Supabase Edge Function + Expo Push / WhatsApp Business API).
-- [ ] Build and publish with EAS: `npx eas-cli@latest build`.
+- [ ] Create a release signing key before publishing to the Play Store.
