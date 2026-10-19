@@ -3,10 +3,11 @@ import { View } from 'react-native';
 import { Card, Header, Icon, Row, Screen, Text } from '@/components/ui';
 import { colors, space } from '@/theme';
 
+// Everyone first, so every user reads the shared rules.
 const SECTIONS = [
+  { title: 'conduct.everyoneTitle', items: ['conduct.everyone1', 'conduct.everyone2'] },
   { title: 'conduct.donorsTitle', items: ['conduct.donors1', 'conduct.donors2', 'conduct.donors3'] },
   { title: 'conduct.driversTitle', items: ['conduct.drivers1', 'conduct.drivers2', 'conduct.drivers3', 'conduct.drivers4'] },
-  { title: 'conduct.everyoneTitle', items: ['conduct.everyone1', 'conduct.everyone2'] },
 ] as const;
 
 export default function Conduct() {

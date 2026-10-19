@@ -1,11 +1,13 @@
 import * as Location from 'expo-location';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { homeHref } from '@/components/nav';
 import { Button, Card, ErrorText, Field, Header, Icon, Row, Screen, Segmented, Text } from '@/components/ui';
 import { currentLocale } from '@/i18n';
-import { COMMUNITIES } from '@/lib/constants';
+import { api } from '@/lib/api';
+import { COMMUNITIES, DEFAULT_BAG_LIMIT } from '@/lib/constants';
 import { weekdayName } from '@/lib/format';
 import { routeWeekday } from '@/lib/schedule';
 import type { Role } from '@/lib/types';
@@ -22,6 +24,7 @@ export default function ProfileSetup() {
     (params.role as Role) ?? profile?.role ?? 'donor',
   );
   const [fullName, setFullName] = useState(profile?.full_name ?? '');
+  const [email, setEmail] = useState(profile?.email ?? '');
   const [whatsapp, setWhatsapp] = useState(profile?.whatsapp ?? '+52 ');
   const [community, setCommunity] = useState(profile?.community ?? 'Ajijic');
   const [address, setAddress] = useState(profile?.address ?? '');
@@ -32,10 +35,21 @@ export default function ProfileSetup() {
   const [model, setModel] = useState(profile?.vehicle_model ?? '');
   const [color, setColor] = useState(profile?.vehicle_color ?? '');
   const [plate, setPlate] = useState(profile?.vehicle_plate ?? '');
+  const [plateState, setPlateState] = useState(profile?.vehicle_plate_state ?? '');
+  const [maxBags, setMaxBags] = useState(profile?.max_bags ?? DEFAULT_BAG_LIMIT);
   const [error, setError] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
   const [agreed, setAgreed] = useState(!!profile?.conduct_accepted_at);
   const communityDay = routeWeekday(community);
+
+  // start from the address they signed in with
+  useEffect(() => {
+    if (profile?.email) return;
+    api
+      .currentEmail()
+      .then((e) => e && setEmail((cur) => cur || e))
+      .catch(() => {});
+  }, [profile?.email]);
 
   if (!userId) return <Redirect href="/" />;
   if (profile && !editing && !params.role) {
@@ -71,12 +85,14 @@ export default function ProfileSetup() {
   async function save() {
     setError(null);
     if (!fullName.trim()) return setError(t('profile.required'));
+    if (email.trim() && !/^\S+@\S+\.\S+$/.test(email.trim())) return setError(t('signIn.invalidEmail'));
     if (role === 'donor' && !address.trim()) return setError(t('profile.addressRequired'));
     if (!agreed) return setError(t('profile.conductRequired'));
     try {
       const saved = await saveProfile({
         role,
         full_name: fullName.trim(),
+        email: email.trim().toLowerCase() || null,
         whatsapp: whatsapp.trim().length > 4 ? whatsapp.trim() : null,
         locale: profile?.locale ?? currentLocale(),
         community,
@@ -87,10 +103,14 @@ export default function ProfileSetup() {
         vehicle_model: model.trim() || null,
         vehicle_color: color.trim() || null,
         vehicle_plate: plate.trim() || null,
+        vehicle_plate_state: plateState.trim() || null,
+        max_bags: role === 'driver' ? maxBags : (profile?.max_bags ?? null),
         conduct_accepted_at: profile?.conduct_accepted_at ?? new Date().toISOString(),
       });
-      if (editing && router.canGoBack()) router.back();
-      else router.replace(saved.role === 'driver' ? '/map' : '/home');
+      // switching role lands on that role's home; a plain edit goes back where it came from
+      const roleChanged = !!profile && profile.role !== saved.role;
+      if (editing && !roleChanged && router.canGoBack()) router.back();
+      else router.replace(homeHref(saved.role));
     } catch (e) {
       setError((e as Error).message);
     }
@@ -116,6 +136,16 @@ export default function ProfileSetup() {
 
         <Card tone="low">
           <Field label={t('profile.fullName')} value={fullName} onChangeText={setFullName} autoComplete="name" />
+          <Field
+            label={t('profile.email')}
+            value={email}
+            onChangeText={setEmail}
+            placeholder={t('signIn.emailPlaceholder')}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoComplete="email"
+            hint={t('profile.emailHint')}
+          />
           <Field
             label={t('profile.whatsapp')}
             value={whatsapp}
@@ -191,14 +221,41 @@ export default function ProfileSetup() {
                 <Field label={t('profile.model')} value={model} onChangeText={setModel} placeholder="NP300" />
               </View>
             </Row>
+            <Field label={t('profile.color')} value={color} onChangeText={setColor} />
             <Row>
-              <View style={{ flex: 1 }}>
-                <Field label={t('profile.color')} value={color} onChangeText={setColor} />
-              </View>
               <View style={{ flex: 1 }}>
                 <Field label={t('profile.plate')} value={plate} onChangeText={setPlate} autoCapitalize="characters" />
               </View>
+              <View style={{ flex: 1 }}>
+                <Field
+                  label={t('profile.plateState')}
+                  value={plateState}
+                  onChangeText={setPlateState}
+                  placeholder={t('profile.plateStatePlaceholder')}
+                />
+              </View>
             </Row>
+            <Text variant="eyebrow">{t('profile.bagLimit')}</Text>
+            <Row gap={space.lg}>
+              <Pressable
+                onPress={() => setMaxBags((n) => Math.max(1, n - 1))}
+                style={[styles.stepper, { backgroundColor: colors.surfaceContainerLowest }]}
+                accessibilityRole="button"
+                accessibilityLabel="−"
+              >
+                <Icon name="remove" />
+              </Pressable>
+              <Text style={styles.count}>{maxBags}</Text>
+              <Pressable
+                onPress={() => setMaxBags((n) => Math.min(20, n + 1))}
+                style={[styles.stepper, { backgroundColor: colors.primary }]}
+                accessibilityRole="button"
+                accessibilityLabel="+"
+              >
+                <Icon name="add" color={colors.onPrimary} />
+              </Pressable>
+            </Row>
+            <Text variant="bodySmall">{t('profile.bagLimitHint')}</Text>
           </Card>
         ) : null}
 
@@ -240,6 +297,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceContainerLowest,
   },
   chipText: { fontFamily: fonts.bodyMedium, fontSize: 13 },
+  stepper: { width: 44, height: 44, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center' },
+  count: { fontFamily: fonts.headline, fontSize: 24, color: colors.onSurface, minWidth: 32, textAlign: 'center' },
   locate: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Api } from './api';
-import { KG_PER_BAG, LAKESIDE_CENTER, MAX_ROUTES_PER_DAY, NO_SHOW_WAIT_MINUTES } from './constants';
+import { DEFAULT_BAG_LIMIT, KG_PER_BAG, LAKESIDE_CENTER, NO_SHOW_WAIT_MINUTES } from './constants';
 import { isPastCutoff, routeWeekday, todayIso, upcomingRouteDays } from './schedule';
 import type {
   Contact,
@@ -19,7 +19,7 @@ import type {
  * Any email signs in and any 6-digit code is accepted.
  */
 
-const STORAGE_KEY = 'recycle-connect-demo-v2';
+const STORAGE_KEY = 'recycle-connect-demo-v3';
 
 type StoredRoute = Omit<Route, 'stop_count' | 'estimated_kg' | 'driver'>;
 
@@ -36,6 +36,7 @@ type State = {
 };
 
 const baseProfile: Omit<Profile, 'id' | 'role' | 'full_name'> = {
+  email: null,
   whatsapp: null,
   locale: 'es',
   address: null,
@@ -46,7 +47,8 @@ const baseProfile: Omit<Profile, 'id' | 'role' | 'full_name'> = {
   vehicle_model: null,
   vehicle_color: null,
   vehicle_plate: null,
-  is_active: false,
+  vehicle_plate_state: null,
+  max_bags: null,
   conduct_accepted_at: null,
   notify_push: true,
   notify_whatsapp: true,
@@ -106,6 +108,8 @@ function seed(): State {
     vehicle_model: 'Hilux',
     vehicle_color: 'Verde',
     vehicle_plate: 'JAL-492-C',
+    vehicle_plate_state: 'Jalisco',
+    max_bags: 4,
     conduct_accepted_at: now(),
   };
   s.locations['demo-driver-jose'] = { lat: LAKESIDE_CENTER.lat + 0.004, lng: LAKESIDE_CENTER.lng - 0.01 };
@@ -185,8 +189,8 @@ function seed(): State {
       deposited_at: d.toISOString(),
     });
     s.ratings.push(
-      { request_id: r.id, rater_id: donorId, ratee_id: 'demo-driver-jose', stars: 5, tags: ['onTime', 'friendly'], comment: null, created_at: d.toISOString() },
-      { request_id: r.id, rater_id: 'demo-driver-jose', ratee_id: donorId, stars: kg > 40 ? 5 : 4, tags: ['bagsReady'], comment: null, created_at: d.toISOString() },
+      { request_id: r.id, rater_id: donorId, ratee_id: 'demo-driver-jose', answers: { pickedUp: true, onTime: true, problem: false }, comment: null, created_at: d.toISOString() },
+      { request_id: r.id, rater_id: 'demo-driver-jose', ratee_id: donorId, answers: { bagsReady: true, asListed: true, problem: false }, comment: null, created_at: d.toISOString() },
     );
   }
 
@@ -269,8 +273,15 @@ async function save() {
 
 function contact(p: Profile | undefined): Contact | null {
   if (!p) return null;
-  const { id, full_name, whatsapp, vehicle_make, vehicle_model, vehicle_color, vehicle_plate } = p;
-  return { id, full_name, whatsapp, vehicle_make, vehicle_model, vehicle_color, vehicle_plate };
+  const { id, full_name, whatsapp, vehicle_make, vehicle_model, vehicle_color, vehicle_plate, vehicle_plate_state } = p;
+  return { id, full_name, whatsapp, vehicle_make, vehicle_model, vehicle_color, vehicle_plate, vehicle_plate_state };
+}
+
+/** Bag limit on a community's route day: its driver's (or weekly driver's) setting, else the default. */
+function bagLimitFor(s: State, community: string, date: string) {
+  const route = s.routes.find((r) => r.community === community && r.route_date === date);
+  const driverId = route ? route.driver_id : (s.commitments[community] ?? null);
+  return (driverId && s.profiles[driverId]?.max_bags) || DEFAULT_BAG_LIMIT;
 }
 
 function hydrate(s: State, r: PickupRequest): PickupRequest {
@@ -322,6 +333,11 @@ export const demoApi: Api = {
     return (await load()).userId;
   },
 
+  async currentEmail() {
+    const id = (await load()).userId;
+    return id?.startsWith('user-') ? id.slice('user-'.length) : null;
+  },
+
   onAuthChange(cb) {
     authListeners.add(cb);
     return () => authListeners.delete(cb);
@@ -365,6 +381,8 @@ export const demoApi: Api = {
     if (weekday == null) throw new Error(`No route serves ${d.community}`);
     if (new Date(`${d.route_date}T12:00:00`).getDay() !== weekday) throw new Error(`Not a route day for ${d.community}`);
     if (isPastCutoff(d.route_date)) throw new Error('Requests for this day are closed');
+    const limit = bagLimitFor(s, d.community, d.route_date);
+    if (d.bag_count > limit) throw new Error(`Drivers on this route take up to ${limit} bags per pickup`);
     const route = ensureRoute(s, d.community, d.route_date);
     if (route.status === 'in_progress' || route.status === 'completed') throw new Error('This route has already started');
     const n = s.nextCase++;
@@ -389,6 +407,10 @@ export const demoApi: Api = {
     s.requests.unshift(r);
     await save();
     return hydrate(s, r);
+  },
+
+  async bagLimit(community, routeDate) {
+    return bagLimitFor(await load(), community, routeDate);
   },
 
   async listMyRequests() {
@@ -465,10 +487,6 @@ export const demoApi: Api = {
       if (s.profiles[userId]?.role !== 'driver') throw new Error('Only drivers can claim routes');
       if (route.status !== 'open') throw new Error('This route is no longer available');
       if (route.route_date < todayIso()) throw new Error('This route has passed');
-      const held = s.routes.filter(
-        (r) => r.driver_id === userId && r.route_date === route.route_date && r.status !== 'completed',
-      ).length;
-      if (held >= MAX_ROUTES_PER_DAY) throw new Error(`You already have ${held} routes that day`);
       if (everyWeek) {
         const holder = s.commitments[route.community];
         if (holder && holder !== userId) throw new Error(`Another driver already holds ${route.community} every week`);
@@ -505,7 +523,8 @@ export const demoApi: Api = {
 
   async startRoute(routeId) {
     await withRoute(routeId, (route, s, userId) => {
-      if (route.driver_id !== userId || route.status !== 'claimed' || route.route_date > todayIso()) {
+      // Demo mode lets testers start a route early so they can try the driver steps.
+      if (route.driver_id !== userId || route.status !== 'claimed') {
         throw new Error('Route can only be started on its day');
       }
       Object.assign(route, { status: 'in_progress', started_at: now() });
@@ -520,6 +539,8 @@ export const demoApi: Api = {
       if (stops.some((r) => r.status === 'en_route')) throw new Error('Finish every stop first');
       for (const r of stops) if (r.status === 'picked_up') Object.assign(r, { status: 'deposited', deposited_at: now() });
       Object.assign(route, { status: 'completed', completed_at: now() });
+      // stop sharing location once the route is done
+      if (!s.routes.some((x) => x.driver_id === userId && x.status === 'in_progress')) delete s.locations[userId];
     });
   },
 
@@ -570,12 +591,6 @@ export const demoApi: Api = {
     });
   },
 
-  async setActive(active) {
-    const { s, id } = await me();
-    s.profiles[id] = { ...s.profiles[id], is_active: active };
-    await save();
-  },
-
   async updateLocation(pos) {
     const { s, id } = await me();
     s.locations[id] = pos;
@@ -595,7 +610,7 @@ export const demoApi: Api = {
     return () => changeListeners.delete(listener);
   },
 
-  async rate(requestId, stars, tags, comment) {
+  async rate(requestId, answers, comment) {
     await withStop(requestId, (r, s, userId) => {
       if (!['picked_up', 'deposited', 'no_show'].includes(r.status)) throw new Error('You can rate once the pickup is done');
       const other = userId === r.donor_id ? r.driver_id : userId === r.driver_id ? r.donor_id : undefined;
@@ -606,8 +621,7 @@ export const demoApi: Api = {
         request_id: requestId,
         rater_id: userId,
         ratee_id: other,
-        stars: Math.max(1, Math.min(5, Math.round(stars))),
-        tags,
+        answers,
         comment: comment?.trim() || null,
         created_at: now(),
       });
@@ -623,11 +637,8 @@ export const demoApi: Api = {
     const s = await load();
     const out: Record<string, Reputation> = {};
     for (const u of userIds) {
-      const received = s.ratings.filter((x) => x.ratee_id === u);
       out[u] = {
         user_id: u,
-        rating_avg: received.length ? received.reduce((sum, x) => sum + x.stars, 0) / received.length : null,
-        rating_count: received.length,
         completed: s.requests.filter((r) => r.status === 'deposited' && (r.donor_id === u || r.driver_id === u)).length,
         no_shows: s.requests.filter((r) => r.status === 'no_show' && r.donor_id === u).length,
         late_drops: s.lateDrops.filter((x) => x.user_id === u).length,
@@ -668,5 +679,21 @@ export const demoApi: Api = {
       donors: all.filter((p) => p.role === 'donor').length,
       drivers: all.filter((p) => p.role === 'driver').length,
     };
+  },
+
+  async demoCompletePickup(requestId) {
+    await withStop(requestId, (r, _s, userId) => {
+      if (r.donor_id !== userId || !['open', 'claimed', 'en_route'].includes(r.status)) {
+        throw new Error('This pickup cannot be completed');
+      }
+      const at = now();
+      Object.assign(r, {
+        driver_id: r.driver_id ?? 'demo-driver-jose',
+        status: 'deposited',
+        actual_kg: r.estimated_kg,
+        picked_up_at: at,
+        deposited_at: at,
+      });
+    });
   },
 };

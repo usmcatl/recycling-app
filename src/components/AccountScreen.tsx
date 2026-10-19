@@ -8,10 +8,11 @@ import type { Locale } from '@/lib/types';
 import { useSession } from '@/providers/session';
 import { colors, space } from '@/theme';
 import { ReputationLine, useReputation } from './rating';
-import { Avatar, BrandBar, Card, Icon, Row, Screen, Segmented, Text, type IconName } from './ui';
+import { BrandBar } from './BrandBar';
+import { Avatar, Card, Icon, Row, Screen, Segmented, Text, type IconName } from './ui';
 
 /** Account tab shared by donors and drivers. `children` renders above the menu. */
-export function AccountScreen({ title, children }: { title: string; children?: ReactNode }) {
+export function AccountScreen({ title, icon, children }: { title: string; icon?: IconName; children?: ReactNode }) {
   const { t, i18n } = useTranslation();
   const { profile, saveProfile, signOut } = useSession();
   const reputation = useReputation([profile?.id]);
@@ -22,11 +23,9 @@ export function AccountScreen({ title, children }: { title: string; children?: R
     await saveProfile({ ...profile!, locale });
   }
 
-  const otherRole = profile.role === 'donor' ? 'driver' : 'donor';
-
   return (
     <View style={{ flex: 1 }}>
-      <BrandBar title={title} />
+      <BrandBar title={title} icon={icon} />
       <Screen>
         <Row>
           <Avatar name={profile.full_name} size={64} />
@@ -35,6 +34,7 @@ export function AccountScreen({ title, children }: { title: string; children?: R
             <Text variant="bodySmall">
               {[profile.community, profile.whatsapp].filter(Boolean).join(' · ')}
             </Text>
+            {profile.email ? <Text variant="bodySmall">{profile.email}</Text> : null}
           </View>
         </Row>
 
@@ -62,11 +62,6 @@ export function AccountScreen({ title, children }: { title: string; children?: R
           <MenuItem icon="notifications" label={t('account.notifications')} onPress={() => router.push('/notifications')} />
           <MenuItem icon="help-outline" label={t('account.help')} onPress={() => router.push('/help')} />
           <MenuItem icon="gavel" label={t('account.conduct')} onPress={() => router.push('/conduct')} />
-          <MenuItem
-            icon="swap-horiz"
-            label={otherRole === 'driver' ? t('account.switchToDriver') : t('account.switchToDonor')}
-            onPress={() => router.push({ pathname: '/profile-setup', params: { edit: '1', role: otherRole } })}
-          />
           <MenuItem
             icon="logout"
             label={t('account.signOut')}

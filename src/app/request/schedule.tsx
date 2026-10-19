@@ -5,7 +5,7 @@ import { Pressable, View } from 'react-native';
 import { useDateLabel } from '@/components/requests';
 import { Button, Card, Header, Icon, IconTile, Screen, Text, type IconName } from '@/components/ui';
 import { formatDateTime, weekdayName } from '@/lib/format';
-import { cutoffFor, routeWeekday, upcomingRouteDates } from '@/lib/schedule';
+import { cutoffFor, missedRouteDate, routeWeekday, upcomingRouteDates } from '@/lib/schedule';
 import type { PickupMode } from '@/lib/types';
 import { useRequestDraft } from '@/providers/request-draft';
 import { useSession } from '@/providers/session';
@@ -24,6 +24,7 @@ export default function Schedule() {
   const community = profile?.community ?? null;
   const weekday = routeWeekday(community);
   const dates = upcomingRouteDates(community, 3);
+  const missed = missedRouteDate(community);
 
   // default to the soonest route day
   useEffect(() => {
@@ -56,6 +57,13 @@ export default function Schedule() {
         <Text variant="eyebrow">{t('scheduleStep.eyebrow')}</Text>
         <Text variant="display">{t('scheduleStep.headline')}</Text>
         <Text>{t('scheduleStep.body', { community, day: weekdayName(weekday) })}</Text>
+
+        {missed ? (
+          <Card tone="high" style={{ flexDirection: 'row' }}>
+            <Icon name="schedule" />
+            <Text style={{ flex: 1 }}>{t('scheduleStep.missed', { date: dateLabel(missed) })}</Text>
+          </Card>
+        ) : null}
 
         {dates.map((date) => {
           const on = date === draft.routeDate;

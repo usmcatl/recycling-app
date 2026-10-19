@@ -49,12 +49,30 @@ export default function Notifications() {
           {methods.map(([k, icon, label]) => (
             <Row key={k}>
               <Icon name={icon} />
-              <Text variant="label" style={{ flex: 1 }}>
-                {label}
-              </Text>
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text variant="label">{label}</Text>
+                {k === 'notify_email' ? (
+                  profile.email ? (
+                    <Text variant="bodySmall">{t('notifications.emailTo', { email: profile.email })}</Text>
+                  ) : (
+                    <>
+                      <Text variant="bodySmall">{t('notifications.emailMissing')}</Text>
+                      <Text
+                        variant="label"
+                        style={{ color: colors.primary, textDecorationLine: 'underline' }}
+                        onPress={() => router.push({ pathname: '/profile-setup', params: { edit: '1' } })}
+                        accessibilityRole="link"
+                      >
+                        {t('notifications.addEmail')}
+                      </Text>
+                    </>
+                  )
+                ) : null}
+              </View>
               <Switch
                 value={prefs[k]}
                 onValueChange={toggle(k)}
+                disabled={k === 'notify_email' && !profile.email}
                 trackColor={{ true: colors.primaryContainer, false: colors.surfaceContainerHighest }}
               />
             </Row>
@@ -82,7 +100,7 @@ export default function Notifications() {
           label={t('common.save')}
           icon="check-circle"
           onPress={async () => {
-            await saveProfile({ ...profile, ...prefs });
+            await saveProfile({ ...profile, ...prefs, notify_email: prefs.notify_email && !!profile.email });
             router.back();
           }}
         />

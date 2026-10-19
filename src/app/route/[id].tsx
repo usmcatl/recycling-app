@@ -43,7 +43,8 @@ export default function RouteDetail() {
   const mine = route.driver_id === userId;
   const stops = orderStops(data.stops, RECYCLING_CENTER.location);
   const pending = stops.filter((s) => s.status === 'en_route');
-  const canStart = mine && route.status === 'claimed' && route.route_date <= todayIso();
+  // demo mode lets testers start early so they can try the driver steps
+  const canStart = mine && route.status === 'claimed' && (api.mode === 'demo' || route.route_date <= todayIso());
 
   async function run(fn: () => Promise<void>) {
     setError(null);
@@ -90,9 +91,9 @@ export default function RouteDetail() {
         {mine && route.status === 'claimed' ? (
           <View style={{ gap: space.sm }}>
             <Button label={t('route.start')} icon="local-shipping" disabled={!canStart} onPress={() => run(() => api.startRoute(route.id))} />
-            {!canStart ? (
+            {!canStart || route.route_date > todayIso() ? (
               <Text variant="bodySmall" style={{ textAlign: 'center' }}>
-                {t('route.startHint')}
+                {api.mode === 'demo' ? t('demo.startAnyDay') : t('route.startHint')}
               </Text>
             ) : null}
             <Button

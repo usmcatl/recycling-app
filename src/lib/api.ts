@@ -22,6 +22,8 @@ export interface Api {
 
   // auth
   currentUserId(): Promise<string | null>;
+  /** The email address the current user signed in with. */
+  currentEmail(): Promise<string | null>;
   onAuthChange(cb: (userId: string | null) => void): () => void;
   sendCode(email: string): Promise<void>;
   verifyCode(email: string, code: string): Promise<void>;
@@ -33,6 +35,8 @@ export interface Api {
 
   // donor
   createRequest(draft: RequestDraft): Promise<PickupRequest>;
+  /** Most bags/boxes one stop may have on a community's route that day (set by its driver). */
+  bagLimit(community: string, routeDate: string): Promise<number>;
   listMyRequests(): Promise<PickupRequest[]>;
   cancelRequest(id: string): Promise<void>;
 
@@ -66,21 +70,24 @@ export interface Api {
   collectStop(requestId: string, opts: { kg?: number; photo?: string }): Promise<void>;
   noShowStop(requestId: string, opts: { note: string; photo?: string }): Promise<void>;
 
-  // driver: presence
-  setActive(active: boolean): Promise<void>;
+  // driver: location (shared only while a route is in progress)
   updateLocation(pos: LatLng): Promise<void>;
   getDriverLocation(driverId: string): Promise<LatLng | null>;
   subscribeDriverLocation(driverId: string, cb: (pos: LatLng) => void): () => void;
 
-  // ratings & reputation
-  rate(requestId: string, stars: number, tags: string[], comment: string | null): Promise<void>;
-  /** The rating the current user gave on a request, if any. */
+  // feedback & reputation
+  /** Private yes/no feedback on the other person after a stop. */
+  rate(requestId: string, answers: Record<string, boolean>, comment: string | null): Promise<void>;
+  /** The feedback the current user gave on a request, if any. */
   myRating(requestId: string): Promise<Rating | null>;
   reputation(userIds: string[]): Promise<Record<string, Reputation>>;
 
   // impact
   leaderboard(period: 'month' | 'all'): Promise<LeaderboardRow[]>;
   communityStats(): Promise<CommunityStats>;
+
+  /** Demo mode only: finish a donor's pickup with a sample driver so testers can reach feedback. */
+  demoCompletePickup?(requestId: string): Promise<void>;
 }
 
 export const api: Api = isSupabaseConfigured ? supabaseApi : demoApi;

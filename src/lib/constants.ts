@@ -26,12 +26,10 @@ export const COMMUNITIES = [
   'Riberas del Pilar',
   'San Juan Cosalá',
   'Jocotepec',
-  'Santa Cruz de la Soledad',
   'Vista del Lago',
   'La Floresta',
   'Chula Vista',
   'El Chante',
-  'Mezcala',
 ] as const;
 
 /** Rough weight used to estimate a request before the driver weighs it. */
@@ -43,11 +41,13 @@ export const MATERIALS: {
   tint: string;
   iconColor: string;
 }[] = [
+  { id: 'mixed', icon: 'recycling', tint: colors.secondaryContainer, iconColor: colors.primary },
   { id: 'paper', icon: 'description', tint: colors.secondaryContainer, iconColor: colors.primary },
   { id: 'plastic', icon: 'water-drop', tint: colors.tertiaryFixed, iconColor: colors.tertiary },
   { id: 'glass', icon: 'wine-bar', tint: '#d7f3ef', iconColor: colors.primaryContainer },
   { id: 'metal', icon: 'category', tint: colors.amberContainer, iconColor: colors.amber },
   { id: 'ewaste', icon: 'devices', tint: colors.surfaceContainerHigh, iconColor: colors.tertiaryContainer },
+  { id: 'books', icon: 'menu-book', tint: colors.amberContainer, iconColor: colors.amber },
 ];
 
 export type Community = (typeof COMMUNITIES)[number];
@@ -65,8 +65,6 @@ export const ROUTE_SCHEDULE: Record<Community, number> = {
   Chapala: 4,
   'Vista del Lago': 4,
   'Chula Vista': 4,
-  'Santa Cruz de la Soledad': 4,
-  Mezcala: 4,
   'San Juan Cosalá': 5,
   'El Chante': 5,
   Jocotepec: 5,
@@ -75,16 +73,19 @@ export const ROUTE_SCHEDULE: Record<Community, number> = {
 /** Changes to a route day lock at this hour (24h) the night before, so drivers can plan. */
 export const CUTOFF_HOUR = 20;
 
-/** How many routes one driver can hold on the same day. */
-export const MAX_ROUTES_PER_DAY = 2;
+/** From this hour (24h) the night before, open routes with stops are flagged to drivers as urgent. */
+export const URGENT_HOUR = 18;
+
+/** Bags/boxes per stop when the route's driver hasn't set their own limit (or there's no driver yet). */
+export const DEFAULT_BAG_LIMIT = 3;
 
 /** In-person pickups: minutes a driver waits after arriving before they may mark a no-show. */
 export const NO_SHOW_WAIT_MINUTES = 5;
 
-/** Quick tags offered when rating the other person, keyed by who is being rated. */
-export const RATING_TAGS = {
-  driver: ['onTime', 'friendly', 'careful', 'communicated'],
-  donor: ['bagsReady', 'wellSorted', 'clearInstructions', 'friendly'],
+/** Yes/no feedback questions after a stop, keyed by who the feedback is about. */
+export const FEEDBACK_QUESTIONS = {
+  driver: ['pickedUp', 'onTime', 'problem'],
+  donor: ['bagsReady', 'asListed', 'problem'],
 } as const;
 
 export const ACTIVE_STATUSES: RequestStatus[] = ['open', 'claimed', 'en_route', 'picked_up'];

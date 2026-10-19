@@ -40,7 +40,17 @@ export default function Welcome() {
           </Pressable>
         </Row>
 
-        <Image source={require('../../assets/images/logo.png')} style={styles.logo} resizeMode="contain" />
+        <View style={{ gap: space.xs }}>
+          <Image
+            source={require('../../assets/images/logo.png')}
+            style={styles.logo}
+            resizeMode="contain"
+            accessibilityLabel={t('common.appName')}
+          />
+          <Text variant="label" style={{ textAlign: 'center', color: colors.onSurfaceVariant }}>
+            {t('common.serviceOf')}
+          </Text>
+        </View>
 
         <Text variant="display" style={{ textAlign: 'center' }}>
           {t('welcome.headline')}
@@ -50,7 +60,7 @@ export default function Welcome() {
         </Text>
 
         <LinearGradient colors={['#e3efd9', colors.secondaryContainer]} style={styles.roleCard}>
-          <IconTile name="recycling" bg={colors.surfaceContainerLowest} />
+          <IconTile name="inventory-2" bg={colors.surfaceContainerLowest} />
           <Text variant="headline">{t('welcome.donorTitle')}</Text>
           <Text>{t('welcome.donorBody')}</Text>
           <Button label={t('welcome.donorCta')} icon="arrow-forward" onPress={() => start('donor')} style={{ alignSelf: 'flex-start' }} />
@@ -93,7 +103,21 @@ export default function Welcome() {
           </Row>
         </Card>
 
-        <Button variant="tertiary" label={t('welcome.haveAccount')} onPress={() => router.push('/sign-in')} />
+        <View style={{ alignItems: 'center', gap: space.md }}>
+          <Text style={{ textAlign: 'center' }}>
+            {t('welcome.haveAccount')}{' '}
+            <Text style={styles.link} onPress={() => router.push('/sign-in')} accessibilityRole="link">
+              {t('welcome.signIn')}
+            </Text>
+          </Text>
+          <Text
+            style={styles.link}
+            onPress={() => router.push({ pathname: '/sign-in', params: { mode: 'create' } })}
+            accessibilityRole="link"
+          >
+            {t('welcome.createAccount')}
+          </Text>
+        </View>
         <Text variant="bodySmall" style={{ textAlign: 'center' }}>
           {t('common.serviceOf')}
         </Text>
@@ -105,7 +129,8 @@ export default function Welcome() {
 const styles = StyleSheet.create({
   content: { paddingHorizontal: space.lg, paddingBottom: space.xxl, gap: space.lg },
   lang: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: radius.full, backgroundColor: colors.surfaceContainerHigh },
-  logo: { width: '100%', height: 170 },
+  logo: { width: '100%', height: 150 },
+  link: { color: colors.primary, fontFamily: fonts.bodySemi, textDecorationLine: 'underline' },
   roleCard: { borderRadius: radius.xl, padding: space.xl, gap: space.md },
   driverCta: {
     alignSelf: 'flex-start',

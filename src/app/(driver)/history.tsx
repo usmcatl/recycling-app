@@ -2,7 +2,8 @@ import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { View } from 'react-native';
 import { RequestCard } from '@/components/requests';
-import { BrandBar, Card, Row, Screen, Stat, Text } from '@/components/ui';
+import { BrandBar } from '@/components/BrandBar';
+import { Card, Row, Screen, Stat, Text } from '@/components/ui';
 import { formatKg } from '@/lib/format';
 import { useClosedStops } from '@/lib/use-driver-data';
 

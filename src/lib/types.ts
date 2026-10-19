@@ -20,12 +20,13 @@ export type PickupMode = 'doorstep' | 'in_person';
 
 export type RouteStatus = 'open' | 'claimed' | 'in_progress' | 'completed';
 
-export type MaterialId = 'paper' | 'plastic' | 'glass' | 'metal' | 'ewaste' | 'other';
+export type MaterialId = 'mixed' | 'paper' | 'plastic' | 'glass' | 'metal' | 'ewaste' | 'books' | 'other';
 
 export type Profile = {
   id: string;
   role: Role;
   full_name: string;
+  email: string | null;
   whatsapp: string | null;
   locale: Locale;
   address: string | null;
@@ -36,7 +37,9 @@ export type Profile = {
   vehicle_model: string | null;
   vehicle_color: string | null;
   vehicle_plate: string | null;
-  is_active: boolean;
+  vehicle_plate_state: string | null;
+  /** drivers: most bags/boxes they take per stop (null = DEFAULT_BAG_LIMIT) */
+  max_bags: number | null;
   conduct_accepted_at: string | null;
   notify_push: boolean;
   notify_whatsapp: boolean;
@@ -58,6 +61,7 @@ export type Contact = {
   vehicle_model: string | null;
   vehicle_color: string | null;
   vehicle_plate: string | null;
+  vehicle_plate_state: string | null;
 };
 
 export type PickupRequest = {
@@ -125,21 +129,20 @@ export type Commitment = {
   weekday: number; // 0 = Sunday
 };
 
+/** Private yes/no feedback after a stop; only the coordinator reads other people's. */
 export type Rating = {
   request_id: string;
   rater_id: string;
   ratee_id: string;
-  stars: number; // 1–5
-  tags: string[];
+  /** question id (see FEEDBACK_QUESTIONS) → yes/no */
+  answers: Record<string, boolean>;
   comment: string | null;
   created_at: string;
 };
 
-/** Track record shown next to someone's name. */
+/** Track record shown next to someone's name, counted automatically. */
 export type Reputation = {
   user_id: string;
-  rating_avg: number | null;
-  rating_count: number;
   completed: number;
   /** donors: pickups marked not collected. drivers: stops they couldn't collect. */
   no_shows: number;

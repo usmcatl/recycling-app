@@ -4,9 +4,10 @@ import { useTranslation } from 'react-i18next';
 import { View } from 'react-native';
 import { confirmAction } from '@/components/confirm';
 import { RouteCard } from '@/components/RouteCard';
-import { BrandBar, Button, Card, ErrorText, Icon, Row, Screen, Text } from '@/components/ui';
+import { UrgentRoutes } from '@/components/UrgentRoutes';
+import { BrandBar } from '@/components/BrandBar';
+import { Button, Card, ErrorText, Icon, Row, Screen, Text } from '@/components/ui';
 import { api } from '@/lib/api';
-import { MAX_ROUTES_PER_DAY } from '@/lib/constants';
 import { weekdayName } from '@/lib/format';
 import { routeWeekday } from '@/lib/schedule';
 import { useDriverRoutes } from '@/lib/use-driver-data';
@@ -32,6 +33,7 @@ export default function Routes() {
       <BrandBar title={t('routes.title')} />
       <Screen>
         <Text>{t('routes.body')}</Text>
+        <UrgentRoutes routes={open} />
         <ErrorText message={error} />
 
         {mine.length > 0 ? (
@@ -73,7 +75,6 @@ export default function Routes() {
 
         <View style={{ gap: space.md }}>
           <Text variant="eyebrow">{t('routes.open')}</Text>
-          <Text variant="bodySmall">{t('routes.cap', { count: MAX_ROUTES_PER_DAY })}</Text>
           {open.length === 0 ? (
             <Card tone="low">
               <Text>{t('routes.noOpen')}</Text>

@@ -33,7 +33,7 @@ function db(): SupabaseClient {
   return client;
 }
 
-const CONTACT = 'id, full_name, whatsapp, vehicle_make, vehicle_model, vehicle_color, vehicle_plate';
+const CONTACT = 'id, full_name, whatsapp, vehicle_make, vehicle_model, vehicle_color, vehicle_plate, vehicle_plate_state';
 const REQUEST_SELECT = `*, donor:profiles!donor_id(${CONTACT}), driver:profiles!driver_id(${CONTACT})`;
 
 function unwrap<T>({ data, error }: { data: T; error: { message: string } | null }): T {
@@ -85,6 +85,11 @@ export const supabaseApi: Api = {
     return data.session?.user.id ?? null;
   },
 
+  async currentEmail() {
+    const { data } = await db().auth.getSession();
+    return data.session?.user.email ?? null;
+  },
+
   onAuthChange(cb) {
     const { data } = db().auth.onAuthStateChange((_event, session) => cb(session?.user.id ?? null));
     return () => data.subscription.unsubscribe();
@@ -132,6 +137,10 @@ export const supabaseApi: Api = {
       }),
     ) as PickupRequest;
     return (await supabaseApi.getRequest(created.id)) ?? created;
+  },
+
+  async bagLimit(community, routeDate) {
+    return Number(unwrap(await db().rpc('bag_limit', { p_community: community, p_date: routeDate })));
   },
 
   async listMyRequests() {
@@ -246,11 +255,6 @@ export const supabaseApi: Api = {
     unwrap(await db().rpc('no_show_stop', { request_id: requestId, note, photo: photo ?? null }));
   },
 
-  async setActive(active) {
-    const id = await uid();
-    unwrap(await db().from('profiles').update({ is_active: active }).eq('id', id));
-  },
-
   async updateLocation({ lat, lng }) {
     const driver_id = await uid();
     unwrap(await db().from('driver_locations').upsert({ driver_id, lat, lng, updated_at: new Date().toISOString() }));
@@ -279,8 +283,8 @@ export const supabaseApi: Api = {
     };
   },
 
-  async rate(requestId, stars, tags, comment) {
-    unwrap(await db().rpc('rate_request', { p_request: requestId, p_stars: stars, p_tags: tags, p_comment: comment }));
+  async rate(requestId, answers, comment) {
+    unwrap(await db().rpc('rate_request', { p_request: requestId, p_answers: answers, p_comment: comment }));
   },
 
   async myRating(requestId) {
@@ -297,8 +301,6 @@ export const supabaseApi: Api = {
     for (const r of rows) {
       out[r.user_id as string] = {
         user_id: r.user_id as string,
-        rating_avg: r.rating_avg == null ? null : Number(r.rating_avg),
-        rating_count: Number(r.rating_count),
         completed: Number(r.completed),
         no_shows: Number(r.no_shows),
         late_drops: Number(r.late_drops),

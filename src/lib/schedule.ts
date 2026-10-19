@@ -1,4 +1,4 @@
-import { COMMUNITIES, CUTOFF_HOUR, ROUTE_SCHEDULE, type Community } from './constants';
+import { COMMUNITIES, CUTOFF_HOUR, ROUTE_SCHEDULE, URGENT_HOUR, type Community } from './constants';
 import { toIsoDate } from './format';
 
 export function isCommunity(name: string | null | undefined): name is Community {
@@ -25,6 +25,29 @@ export function cutoffFor(routeDate: string) {
 
 export function isPastCutoff(routeDate: string, now = new Date()) {
   return now >= cutoffFor(routeDate);
+}
+
+/**
+ * A route date the donor has just missed: sign-up has closed but the route day hasn't
+ * passed yet (from 8 PM the night before through the route day). Null otherwise.
+ */
+export function missedRouteDate(community: string | null | undefined, now = new Date()) {
+  const weekday = routeWeekday(community);
+  if (weekday == null) return null;
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  for (let i = 0; i < 2; i++) {
+    const iso = toIsoDate(d);
+    if (d.getDay() === weekday && isPastCutoff(iso, now)) return iso;
+    d.setDate(d.getDate() + 1);
+  }
+  return null;
+}
+
+/** True from URGENT_HOUR the night before through the route day itself. */
+export function isUrgent(routeDate: string, now = new Date()) {
+  const from = cutoffFor(routeDate);
+  from.setHours(URGENT_HOUR, 0, 0, 0);
+  return now >= from && routeDate >= toIsoDate(now);
 }
 
 /** The next `count` route dates for a community that are still open for changes. */

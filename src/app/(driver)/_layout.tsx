@@ -13,11 +13,11 @@ export default function DriverTabs() {
           initialRouteName="map"
           screenOptions={{ headerShown: false }}
           tabBar={(props) => (
-            <TabBar {...props} icons={{ routes: 'route', map: 'map', history: 'history', profile: 'person' }} />
+            <TabBar {...props} icons={{ map: 'home', routes: 'route', history: 'history', profile: 'person' }} />
           )}
         >
+          <Tabs.Screen name="map" options={{ title: t('tabs.home') }} />
           <Tabs.Screen name="routes" options={{ title: t('tabs.routes') }} />
-          <Tabs.Screen name="map" options={{ title: t('tabs.map') }} />
           <Tabs.Screen name="history" options={{ title: t('tabs.history') }} />
           <Tabs.Screen name="profile" options={{ title: t('account.title') }} />
         </Tabs>

@@ -6,12 +6,13 @@
 --   routes              one community's run on one date; a driver claims the whole route
 --   route_commitments   a driver holding a community's route every week
 --   pickup_requests     a donor's stop on a route (doorstep or in person)
---   ratings             1–5 stars + tags, both directions, after a stop is done
+--   ratings             private yes/no feedback, both directions, after a stop is done
+--                       (only the person who gave it can read it; a coordinator role will review them)
 --   reliability_events  late drops (driver skips after cutoff, donor cancels after cutoff)
 --   driver_locations    last known position of a driver (live tracking)
 --
 -- Clients never write routes/requests directly: everything goes through the security-definer
--- functions below so the rules (cutoff, daily cap, photo, wait-before-no-show) live in one place.
+-- functions below so the rules (cutoff, bag limit, photo, wait-before-no-show) live in one place.
 
 -- ---------------------------------------------------------------------------
 -- Settings
@@ -25,7 +26,8 @@ as $$
   select ((d - 1)::timestamp + interval '20 hours') at time zone 'America/Mexico_City';
 $$;
 
-create or replace function public.max_routes_per_day() returns int language sql immutable as $$ select 2 $$;
+-- Bags/boxes per stop when the route's driver hasn't set their own limit.
+create or replace function public.default_bag_limit() returns int language sql immutable as $$ select 3 $$;
 create or replace function public.no_show_wait() returns interval language sql immutable as $$ select interval '5 minutes' $$;
 
 -- ---------------------------------------------------------------------------
@@ -45,6 +47,7 @@ create table public.profiles (
   id                   uuid primary key references auth.users (id) on delete cascade,
   role                 public.user_role not null default 'donor',
   full_name            text not null,
+  email                text,
   whatsapp             text,
   locale               text not null default 'es' check (locale in ('es', 'en')),
   address              text,
@@ -55,7 +58,8 @@ create table public.profiles (
   vehicle_model        text,
   vehicle_color        text,
   vehicle_plate        text,
-  is_active            boolean not null default false,
+  vehicle_plate_state  text,
+  max_bags             int check (max_bags between 1 and 20), -- drivers; null = default_bag_limit()
   conduct_accepted_at  timestamptz,
   notify_push          boolean not null default true,
   notify_whatsapp      boolean not null default true,
@@ -77,7 +81,7 @@ create table public.route_schedule (
 insert into public.route_schedule (community, weekday) values
   ('Ajijic', 2), ('La Floresta', 2),
   ('San Antonio Tlayacapan', 3), ('Riberas del Pilar', 3),
-  ('Chapala', 4), ('Vista del Lago', 4), ('Chula Vista', 4), ('Santa Cruz de la Soledad', 4), ('Mezcala', 4),
+  ('Chapala', 4), ('Vista del Lago', 4), ('Chula Vista', 4),
   ('San Juan Cosalá', 5), ('El Chante', 5), ('Jocotepec', 5);
 
 create table public.routes (
@@ -138,8 +142,7 @@ create table public.ratings (
   request_id  uuid not null references public.pickup_requests (id) on delete cascade,
   rater_id    uuid not null references public.profiles (id) on delete cascade,
   ratee_id    uuid not null references public.profiles (id) on delete cascade,
-  stars       int not null check (stars between 1 and 5),
-  tags        text[] not null default '{}',
+  answers     jsonb not null default '{}' check (jsonb_typeof(answers) = 'object'), -- question id → yes/no
   comment     text,
   created_at  timestamptz not null default now(),
   primary key (request_id, rater_id)
@@ -195,6 +198,19 @@ begin
 end;
 $$;
 
+-- Most bags/boxes one stop may have on a community's route that day: the route driver's limit,
+-- or (before the route exists) the community's weekly driver's, else the default.
+create or replace function public.bag_limit(p_community text, p_date date)
+returns int
+language sql stable security definer set search_path = public
+as $$
+  select coalesce(p.max_bags, default_bag_limit())
+    from (select 1) one
+    left join routes r on r.community = p_community and r.route_date = p_date
+    left join route_commitments c on c.community = p_community
+    left join profiles p on p.id = case when r.id is not null then r.driver_id else c.driver_id end;
+$$;
+
 -- Push a route's driver/status onto its stops that haven't been collected yet.
 create or replace function public.sync_stops(p_route uuid)
 returns void
@@ -246,16 +262,15 @@ create policy "requests: driver reads open and assigned" on public.pickup_reques
   public.is_driver() and (status = 'open' or driver_id = auth.uid())
 );
 
-create policy "ratings: read own given and received" on public.ratings for select using (
-  rater_id = auth.uid() or ratee_id = auth.uid()
-);
+-- Feedback is private: people only see what they gave.
+create policy "ratings: read own given" on public.ratings for select using (rater_id = auth.uid());
 
 create policy "locations: driver writes own" on public.driver_locations
   for all using (driver_id = auth.uid()) with check (driver_id = auth.uid());
 create policy "locations: donor reads assigned driver" on public.driver_locations for select using (
   exists (
     select 1 from public.pickup_requests r
-    where r.driver_id = driver_locations.driver_id and r.donor_id = auth.uid() and r.status in ('claimed', 'en_route')
+    where r.driver_id = driver_locations.driver_id and r.donor_id = auth.uid() and r.status = 'en_route'
   )
 );
 
@@ -283,6 +298,9 @@ begin
 
   r := ensure_route(p_community, p_route_date);
   if r.status in ('in_progress', 'completed') then raise exception 'This route has already started'; end if;
+  if p_bag_count > bag_limit(p_community, p_route_date) then
+    raise exception 'Drivers on this route take up to % bags per pickup', bag_limit(p_community, p_route_date);
+  end if;
 
   insert into pickup_requests (donor_id, driver_id, route_id, route_date, status, pickup_mode, materials,
     other_material, bag_count, instructions, address, community, lat, lng, estimated_kg)
@@ -340,17 +358,12 @@ language plpgsql security definer set search_path = public
 as $$
 declare
   r routes;
-  held int;
   later record;
 begin
   if not is_driver() then raise exception 'Only drivers can claim routes'; end if;
   select * into r from routes where id = p_route for update;
   if r.id is null or r.status <> 'open' then raise exception 'This route is no longer available'; end if;
   if r.route_date < current_date then raise exception 'This route has passed'; end if;
-
-  select count(*) into held from routes
-   where driver_id = auth.uid() and route_date = r.route_date and status <> 'completed';
-  if held >= max_routes_per_day() then raise exception 'You already have % routes that day', held; end if;
 
   if p_every_week then
     insert into route_commitments (community, driver_id) values (r.community, auth.uid())
@@ -439,6 +452,10 @@ begin
   update pickup_requests set status = 'deposited', deposited_at = now(), updated_at = now()
    where route_id = p_route and status = 'picked_up';
   update routes set status = 'completed', completed_at = now() where id = p_route returning * into r;
+  -- stop sharing location once no route is in progress
+  if not exists (select 1 from routes where driver_id = auth.uid() and status = 'in_progress') then
+    delete from driver_locations where driver_id = auth.uid();
+  end if;
   return r;
 end;
 $$;
@@ -526,7 +543,7 @@ $$;
 -- Ratings & reputation
 -- ---------------------------------------------------------------------------
 
-create or replace function public.rate_request(p_request uuid, p_stars int, p_tags text[], p_comment text)
+create or replace function public.rate_request(p_request uuid, p_answers jsonb, p_comment text)
 returns ratings
 language plpgsql security definer set search_path = public
 as $$
@@ -545,22 +562,20 @@ begin
   end if;
   if other is null then raise exception 'Nobody to rate'; end if;
 
-  insert into ratings (request_id, rater_id, ratee_id, stars, tags, comment)
-  values (p_request, auth.uid(), other, p_stars, coalesce(p_tags, '{}'), nullif(trim(p_comment), ''))
+  insert into ratings (request_id, rater_id, ratee_id, answers, comment)
+  values (p_request, auth.uid(), other, coalesce(p_answers, '{}'), nullif(trim(p_comment), ''))
   on conflict (request_id, rater_id) do update
-    set stars = excluded.stars, tags = excluded.tags, comment = excluded.comment, created_at = now()
+    set answers = excluded.answers, comment = excluded.comment, created_at = now()
   returning * into result;
   return result;
 end;
 $$;
 
 create or replace function public.reputation(user_ids uuid[])
-returns table (user_id uuid, rating_avg numeric, rating_count bigint, completed bigint, no_shows bigint, late_drops bigint)
+returns table (user_id uuid, completed bigint, no_shows bigint, late_drops bigint)
 language sql stable security definer set search_path = public
 as $$
   select u.id,
-         (select round(avg(stars), 2) from ratings where ratee_id = u.id),
-         (select count(*) from ratings where ratee_id = u.id),
          (select count(*) from pickup_requests where status = 'deposited' and (donor_id = u.id or driver_id = u.id)),
          (select count(*) from pickup_requests where status = 'no_show' and donor_id = u.id),
          (select count(*) from reliability_events where user_id = u.id and kind = 'late_drop')

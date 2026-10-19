@@ -19,6 +19,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { api } from '@/lib/api';
+import { goHome } from './nav';
+import { useSession } from '@/providers/session';
 import { ambientShadow, colors, fonts, gradient, radius, space } from '@/theme';
 
 export type IconName = ComponentProps<typeof MaterialIcons>['name'];
@@ -86,9 +88,11 @@ export function Screen({
   );
 }
 
-/** Top bar with back arrow and title, glass-like surface. */
+/** Top bar with back arrow, title and a Home button, glass-like surface. */
 export function Header({ title, right, onBack }: { title: string; right?: ReactNode; onBack?: () => void }) {
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
+  const { profile } = useSession();
   return (
     <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
       <Pressable
@@ -104,21 +108,16 @@ export function Header({ title, right, onBack }: { title: string; right?: ReactN
         {title}
       </Text>
       {right}
-    </View>
-  );
-}
-
-/** Brand bar used on tab roots. */
-export function BrandBar({ title, right }: { title?: string; right?: ReactNode }) {
-  const insets = useSafeAreaInsets();
-  const { t } = useTranslation();
-  return (
-    <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
-      <Icon name="eco" color={colors.primary} size={22} />
-      <Text variant="title" style={{ color: colors.primary, flex: 1, marginLeft: space.sm }}>
-        {title ?? t('common.appName')}
-      </Text>
-      {right}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t('common.home')}
+        hitSlop={12}
+        onPress={() => goHome(profile?.role)}
+        style={styles.headerHome}
+      >
+        <Icon name="home" />
+        <RNText style={styles.headerHomeText}>{t('common.home')}</RNText>
+      </Pressable>
     </View>
   );
 }
@@ -414,6 +413,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(248,250,248,0.92)',
   },
   headerBack: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
+  headerHome: { alignItems: 'center', justifyContent: 'center', minWidth: 40 },
+  headerHomeText: { fontFamily: fonts.bodySemi, fontSize: 10, letterSpacing: 0.6, textTransform: 'uppercase', color: colors.primary },
   demo: {
     flexDirection: 'row',
     alignItems: 'center',

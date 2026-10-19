@@ -8,7 +8,7 @@ import { StatusChip, StatusTracker, useDateLabel, useMaterialsLabel } from '@/co
 import { StopPhoto } from '@/components/StopPhoto';
 import { Avatar, Button, Card, Chip, Header, Icon, IconTile, Loading, Row, Screen, Text } from '@/components/ui';
 import { api } from '@/lib/api';
-import { callNumber, formatKg, openWhatsApp } from '@/lib/format';
+import { callNumber, formatKg, formatPlate, openWhatsApp } from '@/lib/format';
 import { isPastCutoff } from '@/lib/schedule';
 import type { LatLng, PickupRequest } from '@/lib/types';
 import { useData } from '@/lib/use-data';
@@ -125,7 +125,7 @@ export default function RequestStatusScreen() {
                   {[r.driver.vehicle_color, r.driver.vehicle_make, r.driver.vehicle_model].filter(Boolean).join(' ')}
                 </Text>
                 {r.driver.vehicle_plate ? (
-                  <Text variant="bodySmall">{t('requestStatus.plate', { plate: r.driver.vehicle_plate })}</Text>
+                  <Text variant="bodySmall">{t('requestStatus.plate', { plate: formatPlate(r.driver) })}</Text>
                 ) : null}
               </Card>
             ) : null}
@@ -203,6 +203,21 @@ export default function RequestStatusScreen() {
             </Row>
           ) : null}
         </Card>
+
+        {api.demoCompletePickup && (cancellable || r.status === 'en_route') ? (
+          <Card tone="low">
+            <Text variant="bodySmall">{t('demo.simulateHint')}</Text>
+            <Button
+              variant="secondary"
+              icon="science"
+              label={t('demo.simulatePickup')}
+              onPress={async () => {
+                await api.demoCompletePickup!(r.id);
+                await reload();
+              }}
+            />
+          </Card>
+        ) : null}
 
         {cancellable ? (
           <View style={{ gap: space.sm }}>

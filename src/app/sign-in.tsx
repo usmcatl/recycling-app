@@ -8,7 +8,8 @@ import { colors } from '@/theme';
 
 export default function SignIn() {
   const { t } = useTranslation();
-  const { role } = useLocalSearchParams<{ role?: string }>();
+  const { role, mode } = useLocalSearchParams<{ role?: string; mode?: string }>();
+  const creating = mode === 'create' || !!role;
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [sent, setSent] = useState(false);
@@ -44,10 +45,12 @@ export default function SignIn() {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <Header title={t('signIn.title')} />
+      <Header title={creating ? t('signIn.createTitle') : t('signIn.title')} />
       <DemoBanner />
       <Screen>
-        <Text variant="display">{sent ? t('signIn.codeTitle') : t('signIn.headline')}</Text>
+        <Text variant="display">
+          {sent ? t('signIn.codeTitle') : creating ? t('signIn.createHeadline') : t('signIn.headline')}
+        </Text>
         <Text>{sent ? t('signIn.codeBody', { email }) : t('signIn.body')}</Text>
 
         <Card tone="low">

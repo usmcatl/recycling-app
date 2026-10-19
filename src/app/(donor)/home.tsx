@@ -2,7 +2,8 @@ import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { View } from 'react-native';
 import { RequestCard, useDateLabel } from '@/components/requests';
-import { BrandBar, Button, Card, DemoBanner, IconTile, ProgressBar, Row, Screen, Stat, Text } from '@/components/ui';
+import { BrandBar } from '@/components/BrandBar';
+import { Button, Card, DemoBanner, IconTile, ProgressBar, Row, Screen, Stat, Text } from '@/components/ui';
 import { api } from '@/lib/api';
 import { ACTIVE_STATUSES, badgeFor } from '@/lib/constants';
 import { formatKg, formatTime, weekdayName } from '@/lib/format';
@@ -36,7 +37,7 @@ export default function DonorHome() {
         </View>
 
         <Card tone="secondary" style={{ padding: space.xl }}>
-          <IconTile name="recycling" bg={colors.surfaceContainerLowest} />
+          <IconTile name="inventory-2" bg={colors.surfaceContainerLowest} />
           <Text variant="headline">{t('donorHome.requestPickup')}</Text>
           <Text>
             {weekday != null

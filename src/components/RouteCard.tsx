@@ -25,17 +25,15 @@ export function RouteCard({ route, onPress, children }: { route: Route; onPress?
         </Text>
         {route.recurring ? <Icon name="repeat" size={20} color={colors.primary} /> : null}
       </Row>
-      <Row style={{ justifyContent: 'space-between' }}>
-        <Text variant="bodySmall">
-          {route.stop_count ? t('common.stops', { count: route.stop_count }) : t('routes.empty')}
-          {route.stop_count ? ` · ≈ ${formatKg(route.estimated_kg)} kg` : ''}
+      <Text variant="bodySmall">
+        {route.stop_count ? t('common.stops', { count: route.stop_count }) : t('routes.empty')}
+        {route.stop_count ? ` · ≈ ${formatKg(route.estimated_kg)} kg` : ''}
+      </Text>
+      <Row gap={4}>
+        <Icon name={locked ? 'lock' : 'lock-open'} size={14} color={colors.outline} />
+        <Text variant="bodySmall" style={{ flex: 1 }}>
+          {locked ? t('routes.locked') : t('routes.cutoff', { time: formatDateTime(cutoffFor(route.route_date)) })}
         </Text>
-        <Row gap={4}>
-          <Icon name={locked ? 'lock' : 'lock-open'} size={14} color={colors.outline} />
-          <Text variant="bodySmall">
-            {locked ? t('routes.locked') : t('routes.cutoff', { time: formatDateTime(cutoffFor(route.route_date)) })}
-          </Text>
-        </Row>
       </Row>
       {children ? <View style={{ gap: 8 }}>{children}</View> : null}
     </Card>

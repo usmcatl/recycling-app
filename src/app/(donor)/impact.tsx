@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { StyleSheet, View } from 'react-native';
-import { Avatar, BrandBar, Card, Icon, ProgressBar, Row, Screen, Segmented, Stat, Text } from '@/components/ui';
+import { BrandBar } from '@/components/BrandBar';
+import { Avatar, Card, Icon, ProgressBar, Row, Screen, Segmented, Stat, Text } from '@/components/ui';
 import { api } from '@/lib/api';
 import { badgeFor } from '@/lib/constants';
 import { formatKg } from '@/lib/format';

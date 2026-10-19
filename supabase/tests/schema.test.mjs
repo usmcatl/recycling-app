@@ -73,6 +73,7 @@ const { rows: [rb] } = await as(B, create, [['glass'], 2, d.d1, 'in_person', 10]
 ok(ra.status === 'open' && ra.route_id === rb.route_id, 'two donors share one open route');
 await expectError(A, create, [['paper'], 1, d.d1.replace(/\d\d$/, (x) => String(Number(x) + 1).padStart(2, '0')), 'doorstep', 5], /Not a route day/, 'wrong weekday rejected');
 await expectError(A, create, [['paper'], 1, new Date().toISOString().slice(0, 10), 'doorstep', 5], /Not a route day|closed/, 'past-cutoff / non-route date rejected');
+await expectError(A, create, [['paper'], 4, d.d1, 'doorstep', 20], /up to 3 bags/, 'bag limit: more than the default 3 rejected while the route has no driver');
 
 const { rows: mine } = await as(A, 'select id from pickup_requests');
 ok(mine.length === 1 && mine[0].id === ra.id, 'RLS: donor only sees own requests');
@@ -90,17 +91,28 @@ await expectError(E, 'select * from claim_route($1, false)', [ra.route_id], /no 
 const { rows: driverSees } = await as(D, 'select full_name from profiles order by full_name');
 ok(driverSees.length === 3, `RLS: driver sees own profile + donors on their route (${driverSees.map((x) => x.full_name).join(', ')})`);
 
+// bag limit follows the driver's own setting, including on next week's route via the weekly commitment
+await as(D, 'update profiles set max_bags = 5 where id = $1', [D]);
+const { rows: [lim] } = await as(C, "select bag_limit('Ajijic', $1::date) as n", [d.d2]);
+ok(lim.n === 5, `bag limit comes from the weekly driver (${lim.n})`);
+await expectError(C, create, [['metal'], 6, d.d2, 'doorstep', 30], /up to 5 bags/, 'bag limit: more than the driver’s limit rejected');
+
 // weekly commitment: a new sign-up next week lands on D's route automatically
-const { rows: [rc] } = await as(C, create, [['metal'], 1, d.d2, 'doorstep', 5]);
+const { rows: [rc] } = await as(C, create, [['metal'], 5, d.d2, 'doorstep', 25]);
 ok(rc.status === 'claimed' && rc.driver_id === D, 'weekly driver gets next week’s route automatically');
 
 // --- route day ---
 await expectError(D, 'select * from start_route($1)', [ra.route_id], /on its day/, 'cannot start before the route day');
 await db.query('update routes set route_date = current_date where id = $1', [ra.route_id]);
 await db.query('update pickup_requests set route_date = current_date where route_id = $1', [ra.route_id]);
+await as(D, 'insert into driver_locations (driver_id, lat, lng) values ($1, 20.3, -103.26)', [D]);
+const { rows: seenBefore } = await as(A, 'select * from driver_locations');
+ok(seenBefore.length === 0, 'location: donor cannot see the driver before the route starts');
 await as(D, 'select * from start_route($1)', [ra.route_id]);
 const { rows: [enr] } = await db.query('select status from pickup_requests where id = $1', [rb.id]);
 ok(enr.status === 'en_route', 'starting the route puts stops en route');
+const { rows: seenDuring } = await as(A, 'select * from driver_locations');
+ok(seenDuring.length === 1, 'location: donor sees the driver while the route is in progress');
 
 await expectError(D, 'select * from collect_stop($1, 12, null)', [ra.id], /photo/, 'doorstep needs a photo');
 await as(D, "select * from collect_stop($1, 12, 'req/photo.jpg')", [ra.id]);
@@ -115,16 +127,22 @@ await as(D, "select * from no_show_stop($1, 'nobody home', null)", [rb.id]);
 await as(D, 'select * from complete_route($1)', [ra.route_id]);
 const { rows: [dep] } = await db.query('select status, actual_kg from pickup_requests where id = $1', [ra.id]);
 ok(dep.status === 'deposited' && Number(dep.actual_kg) === 12, 'completing the route delivers collected stops');
+const { rows: [locLeft] } = await db.query('select count(*)::int as n from driver_locations where driver_id = $1', [D]);
+ok(locLeft.n === 0, 'location: sharing stops when the route is completed');
 
-// --- ratings & reputation ---
-await as(A, "select * from rate_request($1, 5, '{onTime,friendly}', 'Great')", [ra.id]);
-await as(D, "select * from rate_request($1, 4, '{bagsReady}', null)", [ra.id]);
-await as(A, "select * from rate_request($1, 4, '{onTime}', null)", [ra.id]); // edit own rating
-await expectError(E, "select * from rate_request($1, 1, '{}', null)", [ra.id], /Not your pickup/, 'outsider cannot rate');
-await expectError(C, "select * from rate_request($1, 5, '{}', null)", [rc.id], /once the pickup is done/, 'cannot rate before pickup');
+// --- private feedback & reputation ---
+await as(A, `select * from rate_request($1, '{"pickedUp": true, "onTime": true, "problem": false}', 'Great')`, [ra.id]);
+await as(D, `select * from rate_request($1, '{"bagsReady": true, "asListed": true, "problem": false}', null)`, [ra.id]);
+await as(A, `select * from rate_request($1, '{"pickedUp": true, "onTime": false, "problem": false}', null)`, [ra.id]); // edit own
+await expectError(E, `select * from rate_request($1, '{}', null)`, [ra.id], /Not your pickup/, 'outsider cannot give feedback');
+await expectError(C, `select * from rate_request($1, '{}', null)`, [rc.id], /once the pickup is done/, 'cannot give feedback before pickup');
+const { rows: [mineGiven] } = await as(A, 'select answers from ratings where rater_id = $1', [A]);
+ok(mineGiven?.answers.onTime === false, 'feedback updated after edit');
+const { rows: aboutMe } = await as(D, 'select * from ratings where ratee_id = $1', [D]);
+ok(aboutMe.length === 0, 'feedback is private: the driver cannot read feedback about them');
 const { rows: rep } = await as(A, 'select * from reputation($1::uuid[])', [[D, A, B]]);
 const byId = Object.fromEntries(rep.map((r) => [r.user_id, r]));
-ok(Number(byId[D].rating_avg) === 4 && Number(byId[D].rating_count) === 1, 'driver rating updated after edit (4.0 from 1 rating)');
+ok(!('rating_avg' in byId[D]), 'reputation has no star average');
 ok(Number(byId[A].completed) === 1 && Number(byId[B].no_shows) === 1, 'reputation counts completed and missed');
 
 // --- skips and late drops ---
@@ -141,19 +159,19 @@ await as(C, 'select * from cancel_request($1)', [rc.id]);
 const { rows: [ev2] } = await db.query("select count(*)::int as n from reliability_events where user_id = $1", [C]);
 ok(ev2.n === 1, 'cancelling on the route day records a late drop');
 
-// daily cap
-const caps = [];
-for (const community of ['Ajijic', 'La Floresta']) {
+// no daily cap: one driver can take three routes on the same day
+const same = [];
+for (const community of ['Ajijic', 'La Floresta', 'Test Town']) {
+  if (community === 'Test Town') await db.query("insert into route_schedule (community, weekday) values ('Test Town', 2)");
   const { rows: [r] } = await db.query("insert into routes (community, route_date) values ($1, $2) on conflict (community, route_date) do update set status = 'open', driver_id = null returning id", [community, d.d2]);
-  caps.push(r.id);
+  same.push(r.id);
 }
-await as(E, 'select * from claim_route($1, false)', [caps[0]]);
-await as(E, 'select * from claim_route($1, false)', [caps[1]]);
-const { rows: [third] } = await db.query("insert into routes (community, route_date) values ('Ajijic', $1::date + 7) returning id", [d.d2]);
-await db.query("update routes set route_date = $1 where id = $2", [d.d2, third.id]).catch(() => {});
-const { rows: [extra] } = await db.query("insert into route_schedule (community, weekday) values ('Test Town', 2) returning community");
-const { rows: [r3] } = await db.query("insert into routes (community, route_date) values ($1, $2) returning id", [extra.community, d.d2]);
-await expectError(E, 'select * from claim_route($1, false)', [r3.id], /already have 2 routes/, `daily cap of 2 routes enforced`);
+for (const id of same) await as(E, 'select * from claim_route($1, false)', [id]);
+const { rows: [held] } = await db.query('select count(*)::int as n from routes where driver_id = $1 and route_date = $2', [E, d.d2]);
+ok(held.n === 3, 'no daily cap: a driver can take 3 routes on one day');
+
+const { rows: gone } = await db.query("select community from route_schedule where community in ('Mezcala', 'Santa Cruz de la Soledad')");
+ok(gone.length === 0, 'Mezcala and Santa Cruz de la Soledad are out of the service area');
 
 const { rows: lb } = await as(A, 'select * from leaderboard(null, 10)');
 ok(lb.length === 1 && lb[0].display_name === 'Ana L.', `leaderboard shows "${lb[0]?.display_name}"`);

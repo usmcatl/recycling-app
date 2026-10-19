@@ -45,6 +45,11 @@ export function daysUntil(isoDate: string) {
   return Math.round((target - today) / 86_400_000);
 }
 
+/** "JAL-492-C (Jalisco)" */
+export function formatPlate(v: { vehicle_plate: string | null; vehicle_plate_state: string | null }) {
+  return [v.vehicle_plate, v.vehicle_plate_state ? `(${v.vehicle_plate_state})` : null].filter(Boolean).join(' ');
+}
+
 export function formatKg(kg: number) {
   return kg >= 100 ? Math.round(kg).toLocaleString() : kg.toFixed(kg % 1 === 0 ? 0 : 1);
 }

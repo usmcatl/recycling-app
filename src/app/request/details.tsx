@@ -1,10 +1,12 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useDateLabel, useMaterialsLabel } from '@/components/requests';
 import { Button, Card, ErrorText, Field, Header, Icon, IconTile, Row, Screen, Text } from '@/components/ui';
 import { api } from '@/lib/api';
+import { DEFAULT_BAG_LIMIT } from '@/lib/constants';
+import { useData } from '@/lib/use-data';
 import { useRequestDraft } from '@/providers/request-draft';
 import { useSession } from '@/providers/session';
 import { colors, fonts, radius, space } from '@/theme';
@@ -16,6 +18,17 @@ export default function RequestDetails() {
   const materialsLabel = useMaterialsLabel();
   const dateLabel = useDateLabel();
   const [error, setError] = useState<string | null>(null);
+  const community = profile?.community ?? null;
+  const { data: limitData } = useData(
+    async () => (community && draft.routeDate ? api.bagLimit(community, draft.routeDate) : DEFAULT_BAG_LIMIT),
+    [community, draft.routeDate],
+  );
+  const limit = limitData ?? DEFAULT_BAG_LIMIT;
+
+  // keep the count within the route's limit
+  useEffect(() => {
+    if (draft.bags > limit) update({ bags: limit });
+  }, [draft.bags, limit, update]);
 
   async function submit() {
     if (!profile?.address || !profile.community) {
@@ -72,14 +85,16 @@ export default function RequestDetails() {
             </Pressable>
             <Text style={styles.count}>{draft.bags}</Text>
             <Pressable
-              onPress={() => update((d) => ({ bags: Math.min(50, d.bags + 1) }))}
-              style={[styles.stepper, { backgroundColor: colors.primary }]}
+              onPress={() => update((d) => ({ bags: Math.min(limit, d.bags + 1) }))}
+              disabled={draft.bags >= limit}
+              style={[styles.stepper, { backgroundColor: colors.primary, opacity: draft.bags >= limit ? 0.4 : 1 }]}
               accessibilityRole="button"
               accessibilityLabel="+"
             >
               <Icon name="add" color={colors.onPrimary} />
             </Pressable>
           </Row>
+          <Text variant="bodySmall">{t('detailsStep.bagLimit', { count: limit })}</Text>
         </Card>
 
         <Card tone="low">

@@ -9,7 +9,7 @@ import { colors, space } from '@/theme';
 export default function Help() {
   const { t } = useTranslation();
   const [open, setOpen] = useState<number | null>(0);
-  const faqs = [1, 2, 3, 4, 5].map((n) => ({ q: t(`help.q${n}`), a: t(`help.a${n}`) }));
+  const faqs = [1, 2, 3, 4, 5, 6].map((n) => ({ q: t(`help.q${n}`), a: t(`help.a${n}`) }));
 
   return (
     <View style={{ flex: 1 }}>
