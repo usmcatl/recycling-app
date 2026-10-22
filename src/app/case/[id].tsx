@@ -6,7 +6,7 @@ import { Image, View } from 'react-native';
 import { RatingCard, ReputationLine, useReputation } from '@/components/rating';
 import { StatusChip, useDateLabel, useMaterialsLabel } from '@/components/requests';
 import { StopPhoto } from '@/components/StopPhoto';
-import { Avatar, Button, Card, ErrorText, Field, Header, IconTile, Loading, Row, Screen, Text } from '@/components/ui';
+import { Avatar, Button, ButtonRow, Card, ErrorText, Field, Header, IconTile, Loading, Row, Screen, Text } from '@/components/ui';
 import { api } from '@/lib/api';
 import { NO_SHOW_WAIT_MINUTES } from '@/lib/constants';
 import { callNumber, formatKg, formatTime, openDirections, openWhatsApp } from '@/lib/format';
@@ -126,7 +126,7 @@ export default function StopDetail() {
     <View style={{ flex: 1 }}>
       <Header title={t('stop.title')} />
       <Screen>
-        <Row style={{ justifyContent: 'space-between' }}>
+        <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
           <Text variant="eyebrow">
             #{r.case_code} · {dateLabel(r.route_date)}
           </Text>
@@ -143,10 +143,10 @@ export default function StopDetail() {
             </View>
           </Row>
           {donor?.whatsapp && mine ? (
-            <Row>
-              <Button label={t('stop.callDonor')} icon="call" onPress={() => contact('call')} style={{ flex: 1 }} />
-              <Button variant="secondary" label={t('common.whatsapp')} icon="chat" onPress={() => contact('whatsapp')} style={{ flex: 1 }} />
-            </Row>
+            <ButtonRow>
+              <Button label={t('stop.callDonor')} icon="call" onPress={() => contact('call')} />
+              <Button variant="secondary" label={t('common.whatsapp')} icon="chat" onPress={() => contact('whatsapp')} />
+            </ButtonRow>
           ) : !mine ? (
             <Text variant="bodySmall">{t('stop.contactAfterClaim')}</Text>
           ) : null}
@@ -170,12 +170,12 @@ export default function StopDetail() {
         </Card>
 
         <Row style={{ alignItems: 'stretch' }}>
-          <Card tone="low" style={{ flex: 1 }}>
+          <Card tone="low" style={{ flex: 1, padding: space.md }}>
             <Text variant="eyebrow">{t('stop.load')}</Text>
             <Text style={{ fontFamily: fonts.display, fontSize: 34, color: colors.primary }}>{String(r.bag_count).padStart(2, '0')}</Text>
             <Text variant="bodySmall">≈ {formatKg(r.estimated_kg)} kg</Text>
           </Card>
-          <Card tone="low" style={{ flex: 1 }}>
+          <Card tone="low" style={{ flex: 1, padding: space.md }}>
             <Text variant="eyebrow">{t('stop.mode')}</Text>
             <IconTile name={r.pickup_mode === 'doorstep' ? 'door-front' : 'handshake'} size={40} bg={colors.surfaceContainerLowest} />
             <Text variant="label">{t(`modes.${r.pickup_mode}`)}</Text>
@@ -261,10 +261,10 @@ export default function StopDetail() {
                 placeholder={t('stop.noShowPlaceholder')}
                 multiline
               />
-              <Row>
-                <Button variant="tertiary" label={t('common.cancel')} onPress={() => setIssue(null)} style={{ flex: 1 }} />
-                <Button variant="danger" label={t('stop.noShowConfirm')} disabled={!issue.trim()} onPress={noShow} style={{ flex: 1 }} />
-              </Row>
+              <ButtonRow>
+                <Button variant="tertiary" label={t('common.cancel')} onPress={() => setIssue(null)} />
+                <Button variant="danger" label={t('stop.noShowConfirm')} disabled={!issue.trim()} onPress={noShow} />
+              </ButtonRow>
             </Card>
           )
         ) : null}

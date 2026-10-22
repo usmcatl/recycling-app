@@ -6,7 +6,7 @@ import { Map } from '@/components/Map';
 import { RatingCard, ReputationLine, useReputation } from '@/components/rating';
 import { StatusChip, StatusTracker, useDateLabel, useMaterialsLabel } from '@/components/requests';
 import { StopPhoto } from '@/components/StopPhoto';
-import { Avatar, Button, Card, Chip, Header, Icon, IconTile, Loading, Row, Screen, Text } from '@/components/ui';
+import { Avatar, Button, ButtonRow, Card, Chip, Header, Icon, IconTile, Loading, Row, Screen, Text } from '@/components/ui';
 import { api } from '@/lib/api';
 import { callNumber, formatKg, formatPlate, openWhatsApp } from '@/lib/format';
 import { isPastCutoff } from '@/lib/schedule';
@@ -68,7 +68,7 @@ export default function RequestStatusScreen() {
       <Header title={t('requestStatus.title')} />
       <Screen>
         <Card tone="low">
-          <Row style={{ justifyContent: 'space-between' }}>
+          <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
             <Text variant="eyebrow">
               {t('common.caseId')}: {r.case_code}
             </Text>
@@ -107,16 +107,15 @@ export default function RequestStatusScreen() {
             <Text variant="headline">{r.driver.full_name}</Text>
             <ReputationLine reputation={reputation[r.driver.id]} />
             {r.driver.whatsapp ? (
-              <Row>
-                <Button label={t('common.call')} icon="call" onPress={() => callNumber(r.driver!.whatsapp!)} style={{ flex: 1 }} />
+              <ButtonRow>
+                <Button label={t('common.call')} icon="call" onPress={() => callNumber(r.driver!.whatsapp!)} />
                 <Button
                   variant="secondary"
                   label={t('common.whatsapp')}
                   icon="chat"
                   onPress={() => openWhatsApp(r.driver!.whatsapp!, `Recycle Connect #${r.case_code}`)}
-                  style={{ flex: 1 }}
                 />
-              </Row>
+              </ButtonRow>
             ) : null}
             {r.driver.vehicle_make || r.driver.vehicle_model ? (
               <Card tone="low" style={{ alignSelf: 'stretch' }}>
@@ -134,7 +133,7 @@ export default function RequestStatusScreen() {
 
         {tracking ? (
           <View style={{ gap: space.md }}>
-            <Row style={{ justifyContent: 'space-between' }}>
+            <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
               <Text variant="headline">{t('requestStatus.liveLocation')}</Text>
               <Chip label={t('requestStatus.liveTracking')} />
             </Row>

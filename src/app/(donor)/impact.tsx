@@ -36,7 +36,7 @@ export default function Impact() {
           <Text variant="display" style={{ color: colors.onPrimary, fontSize: 40, lineHeight: 46 }}>
             {mine ? t('impact.rank', { rank: mine.rank }) : t('impact.unranked')}
           </Text>
-          <Row gap={space.xl}>
+          <Row gap={space.xl} style={{ flexWrap: 'wrap' }}>
             <Stat light value={`${formatKg(kg)} kg`} label={t('impact.diverted')} />
             <Stat light value={String(mine?.pickups ?? 0)} label={t('impact.pickups')} />
           </Row>

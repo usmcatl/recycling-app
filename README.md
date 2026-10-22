@@ -71,6 +71,10 @@ on the device, any email signs in, and any 6-digit code works. A blue banner mar
 To help testers reach every step, demo mode adds a "simulate a completed pickup" button on a
 donor's request and lets drivers start a route before its day.
 Maps use OpenStreetMap, so no API key is needed.
+"Use my current location" pins the spot from a recent cached position when there is one, then fills in
+the street: the phone's own geocoder on Android/iOS, and OpenStreetMap's free
+[Nominatim](https://nominatim.org/) service on the web (also no key; fine for this volume, at most one
+lookup per tap).
 
 ## Publishing the mobile web version
 

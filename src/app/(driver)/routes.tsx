@@ -6,7 +6,7 @@ import { confirmAction } from '@/components/confirm';
 import { RouteCard } from '@/components/RouteCard';
 import { UrgentRoutes } from '@/components/UrgentRoutes';
 import { BrandBar } from '@/components/BrandBar';
-import { Button, Card, ErrorText, Icon, Row, Screen, Text } from '@/components/ui';
+import { Button, ButtonRow, Card, ErrorText, Icon, Row, Screen, Text } from '@/components/ui';
 import { api } from '@/lib/api';
 import { weekdayName } from '@/lib/format';
 import { routeWeekday } from '@/lib/schedule';
@@ -82,16 +82,15 @@ export default function Routes() {
           ) : (
             open.map((r) => (
               <RouteCard key={r.id} route={r} onPress={() => router.push(`/route/${r.id}`)}>
-                <Row>
-                  <Button label={t('routes.takeDay')} onPress={() => run(() => api.claimRoute(r.id, false))} style={{ flex: 1 }} />
+                <ButtonRow>
+                  <Button label={t('routes.takeDay')} onPress={() => run(() => api.claimRoute(r.id, false))} />
                   <Button
                     variant="secondary"
                     label={t('routes.everyWeek')}
                     icon="repeat"
                     onPress={() => run(() => api.claimRoute(r.id, true))}
-                    style={{ flex: 1 }}
                   />
-                </Row>
+                </ButtonRow>
               </RouteCard>
             ))
           )}

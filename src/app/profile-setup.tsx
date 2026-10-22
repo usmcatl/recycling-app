@@ -1,14 +1,14 @@
-import * as Location from 'expo-location';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { homeHref } from '@/components/nav';
 import { Button, Card, ErrorText, Field, Header, Icon, Row, Screen, Segmented, Text } from '@/components/ui';
 import { currentLocale } from '@/i18n';
 import { api } from '@/lib/api';
 import { COMMUNITIES, DEFAULT_BAG_LIMIT } from '@/lib/constants';
 import { weekdayName } from '@/lib/format';
+import { addressFor, locateMe, LocationDeniedError } from '@/lib/locate';
 import { routeWeekday } from '@/lib/schedule';
 import type { Role } from '@/lib/types';
 import { useSession } from '@/providers/session';
@@ -38,7 +38,9 @@ export default function ProfileSetup() {
   const [plateState, setPlateState] = useState(profile?.vehicle_plate_state ?? '');
   const [maxBags, setMaxBags] = useState(profile?.max_bags ?? DEFAULT_BAG_LIMIT);
   const [error, setError] = useState<string | null>(null);
-  const [locating, setLocating] = useState(false);
+  // idle → locating (waiting for a position) → lookingUp (pin set, finding the street) → idle
+  const [locating, setLocating] = useState<'idle' | 'locating' | 'lookingUp'>('idle');
+  const [addressMissed, setAddressMissed] = useState(false);
   const [agreed, setAgreed] = useState(!!profile?.conduct_accepted_at);
   const communityDay = routeWeekday(community);
 
@@ -58,27 +60,20 @@ export default function ProfileSetup() {
 
   async function pinMyLocation() {
     setError(null);
-    setLocating(true);
+    setAddressMissed(false);
+    setLocating('locating');
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        setError(t('profile.locationDenied'));
-        return;
-      }
-      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-      if (!address) {
-        const [place] = await Location.reverseGeocodeAsync(pos.coords).catch(() => []);
-        if (place) {
-          setAddress([place.street, place.streetNumber].filter(Boolean).join(' '));
-          const match = COMMUNITIES.find((c) => [place.city, place.district, place.subregion].includes(c));
-          if (match) setCommunity(match);
-        }
-      }
+      const pos = await locateMe();
+      setCoords(pos); // pin right away; the street name can follow
+      setLocating('lookingUp');
+      const found = await addressFor(pos);
+      if (found.street) setAddress((cur) => cur.trim() || found.street!);
+      else if (!address.trim()) setAddressMissed(true);
+      if (found.community) setCommunity(found.community);
     } catch (e) {
-      setError((e as Error).message);
+      setError(e instanceof LocationDeniedError ? t('profile.locationDenied') : t('profile.locationFailed'));
     } finally {
-      setLocating(false);
+      setLocating('idle');
     }
   }
 
@@ -192,10 +187,25 @@ export default function ProfileSetup() {
                 placeholder={t('profile.addressPlaceholder')}
                 hint={t('profile.addressHint')}
               />
-              <Pressable onPress={pinMyLocation} style={styles.locate} accessibilityRole="button">
-                <Icon name={coords ? 'check-circle' : 'my-location'} color={colors.primary} />
+              <Pressable
+                onPress={pinMyLocation}
+                disabled={locating !== 'idle'}
+                style={styles.locate}
+                accessibilityRole="button"
+              >
+                {locating !== 'idle' ? (
+                  <ActivityIndicator color={colors.primary} />
+                ) : (
+                  <Icon name={coords ? 'check-circle' : 'my-location'} color={colors.primary} />
+                )}
                 <Text variant="label" style={{ color: colors.primary, flex: 1 }}>
-                  {locating ? t('common.loading') : coords ? t('profile.locationSet') : t('profile.useLocation')}
+                  {locating === 'locating'
+                    ? t('profile.locating')
+                    : locating === 'lookingUp'
+                      ? t('profile.findingAddress')
+                      : coords
+                        ? t('profile.locationSet')
+                        : t('profile.useLocation')}
                 </Text>
                 {coords ? (
                   <Text variant="bodySmall">
@@ -205,6 +215,7 @@ export default function ProfileSetup() {
               </Pressable>
             </>
           ) : null}
+          {role === 'donor' && addressMissed ? <Text variant="bodySmall">{t('profile.addressNotFound')}</Text> : null}
         </Card>
 
         {role === 'driver' ? (

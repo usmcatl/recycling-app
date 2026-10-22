@@ -53,7 +53,7 @@ export default function DonorHome() {
             label={t('donorHome.requestPickup')}
             icon="arrow-forward"
             onPress={() => router.push('/request/materials')}
-            style={{ alignSelf: 'flex-start' }}
+            style={{ alignSelf: 'stretch' }}
           />
         </Card>
 

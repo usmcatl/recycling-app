@@ -63,7 +63,7 @@ export default function Welcome() {
           <IconTile name="inventory-2" bg={colors.surfaceContainerLowest} />
           <Text variant="headline">{t('welcome.donorTitle')}</Text>
           <Text>{t('welcome.donorBody')}</Text>
-          <Button label={t('welcome.donorCta')} icon="arrow-forward" onPress={() => start('donor')} style={{ alignSelf: 'flex-start' }} />
+          <Button label={t('welcome.donorCta')} icon="arrow-forward" onPress={() => start('donor')} />
         </LinearGradient>
 
         <LinearGradient colors={['#d3f1fc', colors.tertiaryFixed]} style={styles.roleCard}>
@@ -71,7 +71,7 @@ export default function Welcome() {
           <Text variant="headline">{t('welcome.driverTitle')}</Text>
           <Text>{t('welcome.driverBody')}</Text>
           <Pressable onPress={() => start('driver')} style={styles.driverCta} accessibilityRole="button">
-            <Text style={{ color: colors.onPrimary, fontFamily: fonts.bodySemi, fontSize: 16 }}>
+            <Text style={{ color: colors.onPrimary, fontFamily: fonts.bodySemi, fontSize: 16, textAlign: 'center' }}>
               {t('welcome.driverCta')}
             </Text>
           </Pressable>
@@ -133,8 +133,8 @@ const styles = StyleSheet.create({
   link: { color: colors.primary, fontFamily: fonts.bodySemi, textDecorationLine: 'underline' },
   roleCard: { borderRadius: radius.xl, padding: space.xl, gap: space.md },
   driverCta: {
-    alignSelf: 'flex-start',
     backgroundColor: colors.tertiaryContainer,
+    alignItems: 'center',
     borderRadius: radius.full,
     paddingHorizontal: space.lg,
     minHeight: 52,

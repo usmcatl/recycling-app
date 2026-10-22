@@ -15,7 +15,7 @@ export default function DriverProfile() {
   return (
     <AccountScreen title={t('driver.profileTitle')} icon="local-shipping">
       <Card tone="primary">
-        <Row>
+        <Row style={{ flexWrap: 'wrap' }}>
           <Stat light value={String(delivered.length)} label={t('driver.totalPickups')} />
           <Stat light value={formatKg(kg)} label={t('driver.kgCollected')} />
         </Row>

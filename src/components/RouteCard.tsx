@@ -15,7 +15,7 @@ export function RouteCard({ route, onPress, children }: { route: Route; onPress?
   const locked = isPastCutoff(route.route_date);
   return (
     <Card onPress={onPress}>
-      <Row style={{ justifyContent: 'space-between' }}>
+      <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
         <Text variant="eyebrow">{dateLabel(route.route_date)}</Text>
         <RouteStatusChip status={route.status} />
       </Row>
