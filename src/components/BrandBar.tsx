@@ -5,41 +5,47 @@ import { colors, space } from '@/theme';
 import { RoleSwitch } from './RoleSwitch';
 import { Icon, Text, type IconName } from './ui';
 
-/** Top bar on tab screens: the logo (or an icon), the screen title, and the Donor / Driver switch. */
+/**
+ * Top bar on tab screens: the logo (or an icon) and the Donor / Driver switch, with the
+ * screen title on its own line below so long titles are never cut off.
+ */
 export function BrandBar({ title, icon }: { title?: string; icon?: IconName }) {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   return (
     <View style={[styles.bar, { paddingTop: insets.top + space.sm }]}>
-      {icon ? (
-        <View style={styles.iconWrap}>
-          <Icon name={icon} size={24} color={colors.primary} />
-        </View>
-      ) : (
-        <Image
-          source={require('../../assets/images/logo-mark.png')}
-          style={styles.mark}
-          resizeMode="contain"
-          accessibilityLabel={t('common.appName')}
-        />
-      )}
-      <Text variant="title" style={{ color: colors.primary, flex: 1 }} numberOfLines={1}>
-        {title ?? ''}
-      </Text>
-      <RoleSwitch />
+      <View style={styles.top}>
+        {icon ? (
+          <View style={styles.iconWrap}>
+            <Icon name={icon} size={24} color={colors.primary} />
+          </View>
+        ) : (
+          <Image
+            source={require('../../assets/images/logo-mark.png')}
+            style={styles.mark}
+            resizeMode="contain"
+            accessibilityLabel={t('common.appName')}
+          />
+        )}
+        <RoleSwitch />
+      </View>
+      {title ? (
+        <Text variant="title" style={{ color: colors.primary }}>
+          {title}
+        </Text>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   bar: {
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: space.sm,
     paddingHorizontal: space.lg,
     paddingBottom: space.md,
     backgroundColor: 'rgba(248,250,248,0.92)',
   },
+  top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm },
   mark: { width: 44, height: 36 },
   iconWrap: {
     width: 40,

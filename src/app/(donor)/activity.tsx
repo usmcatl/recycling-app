@@ -10,7 +10,7 @@ import { ACTIVE_STATUSES, badgeFor } from '@/lib/constants';
 import { formatKg } from '@/lib/format';
 import type { PickupRequest } from '@/lib/types';
 import { useData } from '@/lib/use-data';
-import { colors } from '@/theme';
+import { colors, space } from '@/theme';
 
 type Filter = 'all' | 'active' | 'done' | 'closed';
 
@@ -37,11 +37,11 @@ export default function Activity() {
         <Text>{t('activity.body')}</Text>
 
         <Row>
-          <Card style={{ flex: 1 }}>
+          <Card style={{ flex: 1, padding: space.md }}>
             <IconTile name="recycling" size={40} />
             <Stat value={`${formatKg(kg)}`} label={t('activity.kgDiverted')} />
           </Card>
-          <Card style={{ flex: 1 }}>
+          <Card style={{ flex: 1, padding: space.md }}>
             <IconTile name="local-shipping" size={40} bg={colors.tertiaryFixed} color={colors.tertiary} />
             <Stat value={String(done.length)} label={t('activity.completed')} />
           </Card>

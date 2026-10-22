@@ -81,7 +81,7 @@ export function RatingCard({ request, rateeRole }: { request: PickupRequest; rat
   if (existing && !editing) {
     return (
       <Card tone="low">
-        <Row style={{ justifyContent: 'space-between' }}>
+        <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
           <Text variant="eyebrow">{t('rating.yourFeedback')}</Text>
           <Pressable onPress={() => setEditing(true)} hitSlop={8}>
             <Text variant="label" style={{ color: colors.primary }}>

@@ -6,6 +6,7 @@ import { BrandBar } from '@/components/BrandBar';
 import { Card, Row, Screen, Stat, Text } from '@/components/ui';
 import { formatKg } from '@/lib/format';
 import { useClosedStops } from '@/lib/use-driver-data';
+import { space } from '@/theme';
 
 export default function DriverHistory() {
   const { t } = useTranslation();
@@ -15,11 +16,11 @@ export default function DriverHistory() {
     <View style={{ flex: 1 }}>
       <BrandBar title={t('driver.historyTitle')} />
       <Screen>
-        <Row>
-          <Card style={{ flex: 1 }}>
+        <Row style={{ flexWrap: 'wrap' }}>
+          <Card style={{ flexGrow: 1, flexBasis: 130, padding: space.md }}>
             <Stat value={String(delivered.length)} label={t('driver.totalPickups')} />
           </Card>
-          <Card style={{ flex: 1 }}>
+          <Card style={{ flexGrow: 1, flexBasis: 130, padding: space.md }}>
             <Stat value={formatKg(kg)} label={t('driver.kgCollected')} />
           </Card>
         </Row>

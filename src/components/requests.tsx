@@ -53,7 +53,7 @@ export function RequestCard({ request, onPress, trailing, showDonor }: {
   const kg = request.actual_kg ?? request.estimated_kg;
   return (
     <Card onPress={onPress}>
-      <Row style={{ justifyContent: 'space-between' }}>
+      <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
         <Text variant="eyebrow">#{request.case_code}</Text>
         <StatusChip status={request.status} />
       </Row>
@@ -61,10 +61,10 @@ export function RequestCard({ request, onPress, trailing, showDonor }: {
       <Text variant="bodySmall">
         {dateLabel(request.route_date)} · {t(`modes.${request.pickup_mode}`)} · {t('common.bags', { count: request.bag_count })}
       </Text>
-      <Row style={{ justifyContent: 'space-between' }}>
+      <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
         <Row gap={6} style={{ flex: 1 }}>
           <Icon name="location-on" size={16} color={colors.outline} />
-          <Text variant="bodySmall" numberOfLines={1} style={{ flex: 1 }}>
+          <Text variant="bodySmall" style={{ flex: 1 }}>
             {showDonor ? request.address : request.community}
           </Text>
         </Row>

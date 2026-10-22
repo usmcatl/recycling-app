@@ -1,7 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { useState, type ComponentProps, type ReactNode } from 'react';
+import { Children, cloneElement, isValidElement, useState, type ComponentProps, type ReactElement, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -46,7 +46,7 @@ const variantStyles: Record<Variant, TextStyle> = {
     fontFamily: fonts.bodySemi,
     fontSize: 11,
     lineHeight: 14,
-    letterSpacing: 1.6,
+    letterSpacing: 1.2,
     textTransform: 'uppercase',
     color: colors.onSurfaceVariant,
   },
@@ -104,7 +104,7 @@ export function Header({ title, right, onBack }: { title: string; right?: ReactN
       >
         <Icon name="arrow-back" />
       </Pressable>
-      <Text variant="title" style={{ color: colors.primary, flex: 1 }} numberOfLines={1}>
+      <Text variant="title" style={{ color: colors.primary, flex: 1 }}>
         {title}
       </Text>
       {right}
@@ -160,6 +160,24 @@ export function Card({
     <Pressable onPress={onPress} style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}>
       {body}
     </Pressable>
+  );
+}
+
+/**
+ * Two or more buttons side by side that stack full-width when the screen is too narrow
+ * for their labels, so no label is squeezed or cut off.
+ */
+export function ButtonRow({ children }: { children: ReactNode }) {
+  return (
+    <View style={styles.buttonRow}>
+      {Children.map(children, (child) =>
+        isValidElement(child)
+          ? cloneElement(child as ReactElement<ButtonProps>, {
+              style: [{ flexGrow: 1, flexBasis: 150 }, (child.props as ButtonProps).style],
+            })
+          : child,
+      )}
+    </View>
   );
 }
 
@@ -390,11 +408,11 @@ export function Avatar({ name, size = 40 }: { name: string; size?: number }) {
 
 export function Stat({ value, label, light }: { value: string; label: string; light?: boolean }) {
   return (
-    <View style={{ gap: 2 }}>
+    <View style={{ gap: 2, flexShrink: 1 }}>
       <Text variant="headline" style={{ color: light ? colors.onPrimary : colors.primary, fontSize: 28, lineHeight: 32 }}>
         {value}
       </Text>
-      <Text variant="eyebrow" style={{ color: light ? colors.onPrimaryContainer : colors.onSurfaceVariant, letterSpacing: 1 }}>
+      <Text variant="label" style={{ color: light ? colors.onPrimaryContainer : colors.onSurfaceVariant, fontSize: 12, lineHeight: 16 }}>
         {label}
       </Text>
     </View>
@@ -424,15 +442,17 @@ const styles = StyleSheet.create({
     backgroundColor: colors.tertiaryFixed,
   },
   card: { borderRadius: radius.xl, padding: space.lg, gap: space.md },
+  buttonRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md, alignSelf: 'stretch' },
   iconTile: { borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   button: {
     minHeight: 56,
     borderRadius: radius.full,
-    paddingHorizontal: space.lg,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  buttonLabel: { fontFamily: fonts.bodySemi, fontSize: 16 },
+  buttonLabel: { fontFamily: fonts.bodySemi, fontSize: 16, flexShrink: 1, textAlign: 'center' },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -444,7 +464,14 @@ const styles = StyleSheet.create({
   },
   dot: { width: 6, height: 6, borderRadius: 3 },
   chipText: { fontFamily: fonts.bodySemi, fontSize: 11, letterSpacing: 1, textTransform: 'uppercase' },
-  segmented: { backgroundColor: colors.surfaceContainerHigh, borderRadius: radius.full, padding: 4, alignSelf: 'flex-start' },
+  segmented: {
+    backgroundColor: colors.surfaceContainerHigh,
+    borderRadius: radius.xl,
+    padding: 4,
+    alignSelf: 'flex-start',
+    flexWrap: 'wrap',
+    maxWidth: '100%',
+  },
   segment: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: radius.full },
   segmentText: { fontFamily: fonts.bodySemi, fontSize: 13 },
   input: {
