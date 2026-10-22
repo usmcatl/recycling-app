@@ -1,0 +1,138 @@
+import { router } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { useDateLabel, useMaterialsLabel } from '@/components/requests';
+import { Button, Card, ErrorText, Field, Header, Icon, IconTile, Row, Screen, Text } from '@/components/ui';
+import { api } from '@/lib/api';
+import { DEFAULT_BAG_LIMIT } from '@/lib/constants';
+import { useData } from '@/lib/use-data';
+import { useRequestDraft } from '@/providers/request-draft';
+import { useSession } from '@/providers/session';
+import { colors, fonts, radius, space } from '@/theme';
+
+export default function RequestDetails() {
+  const { t } = useTranslation();
+  const { profile } = useSession();
+  const { draft, update, reset } = useRequestDraft();
+  const materialsLabel = useMaterialsLabel();
+  const dateLabel = useDateLabel();
+  const [error, setError] = useState<string | null>(null);
+  const community = profile?.community ?? null;
+  const { data: limitData } = useData(
+    async () => (community && draft.routeDate ? api.bagLimit(community, draft.routeDate) : DEFAULT_BAG_LIMIT),
+    [community, draft.routeDate],
+  );
+  const limit = limitData ?? DEFAULT_BAG_LIMIT;
+
+  // keep the count within the route's limit
+  useEffect(() => {
+    if (draft.bags > limit) update({ bags: limit });
+  }, [draft.bags, limit, update]);
+
+  async function submit() {
+    if (!profile?.address || !profile.community) {
+      setError(t('profile.addressRequired'));
+      return;
+    }
+    setError(null);
+    try {
+      const created = await api.createRequest({
+        materials: draft.materials,
+        other_material: draft.materials.includes('other') ? draft.otherMaterial.trim() : null,
+        bag_count: draft.bags,
+        route_date: draft.routeDate,
+        pickup_mode: draft.mode,
+        instructions: draft.instructions.trim() || null,
+        address: profile.address,
+        community: profile.community,
+        lat: profile.lat,
+        lng: profile.lng,
+      });
+      reset();
+      router.replace(`/confirmed/${created.id}`);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
+  return (
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <Header title={t('detailsStep.title')} />
+      <Screen>
+        <Text variant="eyebrow">{t('detailsStep.eyebrow')}</Text>
+        <Text variant="display">{t('detailsStep.headline')}</Text>
+
+        <Card tone="low">
+          <Text variant="eyebrow">{t('detailsStep.summary')}</Text>
+          <Text variant="title">{materialsLabel(draft.materials, draft.otherMaterial)}</Text>
+          <Text variant="bodySmall">
+            {draft.routeDate ? dateLabel(draft.routeDate) : '—'} · {t(`modes.${draft.mode}`)}
+          </Text>
+        </Card>
+
+        <Card tone="low">
+          <Text variant="eyebrow">{t('detailsStep.quantity')}</Text>
+          <Text variant="title">{t('detailsStep.quantityLabel')}</Text>
+          <Row gap={space.lg}>
+            <Pressable
+              onPress={() => update((d) => ({ bags: Math.max(1, d.bags - 1) }))}
+              style={[styles.stepper, { backgroundColor: colors.surfaceContainerLowest }]}
+              accessibilityRole="button"
+              accessibilityLabel="−"
+            >
+              <Icon name="remove" />
+            </Pressable>
+            <Text style={styles.count}>{draft.bags}</Text>
+            <Pressable
+              onPress={() => update((d) => ({ bags: Math.min(limit, d.bags + 1) }))}
+              disabled={draft.bags >= limit}
+              style={[styles.stepper, { backgroundColor: colors.primary, opacity: draft.bags >= limit ? 0.4 : 1 }]}
+              accessibilityRole="button"
+              accessibilityLabel="+"
+            >
+              <Icon name="add" color={colors.onPrimary} />
+            </Pressable>
+          </Row>
+          <Text variant="bodySmall">{t('detailsStep.bagLimit', { count: limit })}</Text>
+        </Card>
+
+        <Card tone="low">
+          <Field
+            label={t('detailsStep.instructions')}
+            value={draft.instructions}
+            onChangeText={(v) => update({ instructions: v })}
+            placeholder={t('detailsStep.instructionsPlaceholder')}
+            multiline
+          />
+        </Card>
+
+        <Card tone="secondary" style={{ flexDirection: 'row' }}>
+          <IconTile name="location-on" size={44} bg="rgba(255,255,255,0.5)" />
+          <View style={{ flex: 1, gap: 4 }}>
+            <Text variant="label">{t('detailsStep.location')}</Text>
+            <Text variant="bodySmall">
+              {[profile?.address, profile?.community].filter(Boolean).join(', ') || '—'}
+            </Text>
+            <Pressable onPress={() => router.push({ pathname: '/profile-setup', params: { edit: '1' } })}>
+              <Text variant="eyebrow" style={{ color: colors.primary, marginTop: 4 }}>
+                {t('detailsStep.changeAddress')}
+              </Text>
+            </Pressable>
+          </View>
+        </Card>
+
+        <ErrorText message={error} />
+        <Button label={t('detailsStep.submit')} icon="send" onPress={submit} />
+        <Text variant="bodySmall" style={{ textAlign: 'center' }}>
+          {t('detailsStep.terms')}
+        </Text>
+      </Screen>
+    </KeyboardAvoidingView>
+  );
+}
+
+const styles = StyleSheet.create({
+  stepper: { width: 48, height: 48, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center' },
+  count: { fontFamily: fonts.headline, fontSize: 28, color: colors.onSurface, minWidth: 32, textAlign: 'center' },
+});
